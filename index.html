@@ -7,9 +7,10 @@
 <style>
   :root { --bg:#f7f8fa; --card:#fff; --line:#e3e6eb; --fg:#1b1f29; --muted:#6a7285; --accent:#2f5bea; }
   * { box-sizing: border-box; }
+  html, body { height:100%; }
   body { margin:0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background:var(--bg); color:var(--fg); }
-  main { max-width:1200px; margin:0 auto; padding:24px 16px 48px; }
-  h1 { font-size:20px; margin:0 0 16px; }
+  main { height:100vh; display:flex; flex-direction:column; padding:16px 20px; }   /* full màn hình, không giới hạn chiều rộng */
+  h1 { font-size:20px; margin:0 0 12px; }
   .bar { display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; background:var(--card);
          border:1px solid var(--line); border-radius:10px; padding:14px; }
   label { display:flex; flex-direction:column; gap:4px; font-size:12px; color:var(--muted); }
@@ -18,13 +19,16 @@
   button { cursor:pointer; }
   button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
   button:disabled { opacity:.5; cursor:not-allowed; }
-  #msg { margin:12px 2px; font-size:13px; color:var(--muted); min-height:18px; }
+  #msg { margin:10px 2px; font-size:13px; color:var(--muted); min-height:18px; }
   #msg.warn { color:#b45309; }
-  .wrap { overflow:auto; max-height:65vh; background:var(--card); border:1px solid var(--line); border-radius:10px; }
-  table { border-collapse:collapse; width:100%; }
+  .wrap { flex:1; min-height:0; overflow:auto; background:var(--card); border:1px solid var(--line); border-radius:10px; }
+  table { border-collapse:separate; border-spacing:0; width:100%; }
   th, td { padding:8px 12px; font-size:13px; border-bottom:1px solid var(--line); text-align:left; white-space:nowrap; }
-  th { position:sticky; top:0; background:#f1f3f7; }
+  th { position:sticky; top:0; background:#f1f3f7; z-index:2; }
   td.num { text-align:right; font-variant-numeric: tabular-nums; }
+  /* Dòng tổng cố định ở đáy khung bảng */
+  tfoot td { position:sticky; bottom:0; z-index:2; background:#e8eefc; font-weight:700; border-top:2px solid var(--accent); border-bottom:0; }
+  tfoot td.warn { background:#fef3c7; }
 </style>
 </head>
 <body>
@@ -38,13 +42,13 @@
     <button id="dl" disabled>Download CSV</button>
   </div>
   <div id="msg"></div>
-  <div class="wrap"><table id="tbl"></table></div>
+  <div class="wrap" id="wrap" hidden><table id="tbl"></table></div>
 </main>
 
 <script>
 // >>> Đổi thành domain API của bạn (không có dấu / ở cuối)
 const API = 'https://report-api.orderpermillion.trade';
-const MAX_DAYS = 31;   // phải khớp MAX_DAYS của API
+const MAX_DAYS = 15;   // phải khớp MAX_DAYS của API
 
 const $ = id => document.getElementById(id);
 let rows = [];
@@ -64,7 +68,16 @@ const fmtVal = (k, v) => {
   if (TIME_COLS.test(k)) return String(v).replace('T', ' ').slice(0, 19);
   return v;
 };
-const fmtNum = v => (typeof v === 'number') ? v.toLocaleString('vi-VN') : v;
+const fmtNum = v => (typeof v === 'number') ? v.toLocaleString('vi-VN', { maximumFractionDigits: 3 }) : v;
+// Các cột được cộng tổng (không cộng % Phí dv và Khu)
+const SUM_COLS = ['SL_khach','Tien_hang','Tien_phi_DV','Giam_chi_tiet','Giam_phieu','Tong_giam',
+                  'Tien_truoc_thue','Thue_VAT','Tong_sau_thue','Thuc_tra'];
+// Tổng trên TOÀN BỘ dòng API trả về (không phải một trang). Cộng theo đơn vị 1/1000 để tránh sai số số thực.
+function totals(rows) {
+  const s = Object.fromEntries(SUM_COLS.map(c => [c, 0]));
+  for (const r of rows) for (const c of SUM_COLS) s[c] += Math.round((Number(r[c]) || 0) * 1000);
+  return Object.fromEntries(SUM_COLS.map(c => [c, s[c] / 1000]));
+}
 const setMsg = (t, warn) => { $('msg').textContent = t; $('msg').className = warn ? 'warn' : ''; };
 
 const yesterday = new Date(Date.now() - 864e5).toISOString().slice(0, 10);
@@ -104,20 +117,38 @@ $('btn').onclick = async () => {
 
   rows = data.rows;
   const tbl = $('tbl'); tbl.replaceChildren();
+  $('wrap').hidden = !rows.length;
   if (!rows.length) return setMsg('Không có dữ liệu');
   const cols = Object.keys(rows[0]);
-  const head = tbl.insertRow();
-  cols.forEach(c => { const th = document.createElement('th'); th.textContent = label(c); head.appendChild(th); });
+
+  const thead = tbl.createTHead().insertRow();
+  cols.forEach(c => { const th = document.createElement('th'); th.textContent = label(c); thead.appendChild(th); });
+
+  const tbody = tbl.createTBody();
   rows.forEach(row => {
-    const tr = tbl.insertRow();
+    const tr = tbody.insertRow();
     cols.forEach(c => {
       const td = tr.insertCell();
       td.textContent = fmtNum(fmtVal(c, row[c]));       // textContent: chống XSS
       if (typeof row[c] === 'number') td.className = 'num';
     });
   });
+
+  // Dòng tổng cố định (tfoot sticky) — tính trên toàn bộ rows trả về
+  const sums = totals(rows);
+  const foot = tbl.createTFoot().insertRow();
+  cols.forEach((c, i) => {
+    const td = foot.insertCell();
+    if (i === 0) {
+      td.textContent = `TỔNG (${rows.length.toLocaleString('vi-VN')} phiếu${data.truncated ? ', chưa đủ' : ''})`;
+      if (data.truncated) td.className = 'warn';
+    } else if (SUM_COLS.includes(c)) {
+      td.textContent = fmtNum(sums[c]); td.className = 'num' + (data.truncated ? ' warn' : '');
+    } else if (data.truncated) td.className = 'warn';
+  });
+
   if (data.truncated) {
-    setMsg(`Chỉ hiển thị ${data.limit.toLocaleString('vi-VN')} dòng đầu. Hãy thu hẹp khoảng ngày hoặc chọn một chi nhánh để xem đầy đủ.`, true);
+    setMsg(`Chỉ hiển thị ${data.limit.toLocaleString('vi-VN')} dòng đầu nên dòng TỔNG chưa phản ánh toàn bộ dữ liệu. Hãy thu hẹp khoảng ngày hoặc chọn một chi nhánh.`, true);
   } else {
     setMsg(`${rows.length.toLocaleString('vi-VN')} dòng`);
   }
