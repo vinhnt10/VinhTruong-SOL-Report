@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Doanh thu theo NH</title>
+<style>
+  :root { --bg:#f7f8fa; --card:#fff; --line:#e3e6eb; --fg:#1b1f29; --muted:#6a7285; --accent:#2f5bea; }
+  * { box-sizing: border-box; }
+  html, body { height:100%; }
+  body { margin:0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background:var(--bg); color:var(--fg); }
+  main { height:100vh; display:flex; flex-direction:column; padding:16px 20px; }   /* full màn hình, không giới hạn chiều rộng */
+  .top { display:flex; align-items:baseline; gap:16px; margin:0 0 12px; }
+  h1 { font-size:20px; margin:0; }
+  .back { font-size:13px; color:var(--accent); text-decoration:none; white-space:nowrap; }
+  .back:hover { text-decoration:underline; }
+  .bar { display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; background:var(--card);
+         border:1px solid var(--line); border-radius:10px; padding:14px; }
+  label { display:flex; flex-direction:column; gap:4px; font-size:12px; color:var(--muted); }
+  input, select, button { font:inherit; padding:8px 12px; border:1px solid var(--line); border-radius:8px; background:#fff; color:var(--fg); }
+  select { min-width:220px; }
+  button { cursor:pointer; }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  button:disabled { opacity:.5; cursor:not-allowed; }
+  #msg { margin:10px 2px; font-size:13px; color:var(--muted); min-height:18px; }
+  #msg.warn { color:#b45309; }
+  .wrap { flex:1; min-height:0; overflow:auto; background:var(--card); border:1px solid var(--line); border-radius:10px; }
+  table { border-collapse:separate; border-spacing:0; width:100%; }
+  th, td { padding:8px 12px; font-size:13px; border-bottom:1px solid var(--line); text-align:left; white-space:nowrap; }
+  th { position:sticky; top:0; background:#f1f3f7; z-index:2; }
+  td.num { text-align:right; font-variant-numeric: tabular-nums; }
+  /* Dòng tổng cố định ở đáy khung bảng */
+  tfoot td { position:sticky; bottom:0; z-index:2; background:#e8eefc; font-weight:700; border-top:2px solid var(--accent); border-bottom:0; }
+  tfoot td.warn { background:#fef3c7; }
+</style>
+</head>
+<body>
+<main>
+  <div class="top"><a class="back" href="index.html">&larr; Trang chủ</a><h1>Doanh thu theo NH</h1></div>
+  <div class="bar">
+    <label>Từ ngày<input type="date" id="fromDate"></label>
+    <label>Đến ngày<input type="date" id="toDate"></label>
+    <label>Chi nhánh<select id="rest"><option value="ALL">Tất cả</option></select></label>
+    <button id="btn" class="primary">Tìm</button>
+    <button id="dl" disabled>Download CSV</button>
+  </div>
+  <div id="msg"></div>
+  <div class="wrap" id="wrap" hidden><table id="tbl"></table></div>
+</main>
+
+<script>
+// >>> Đổi thành domain API của bạn (không có dấu / ở cuối)
+const API = 'https://report-api.orderpermillion.trade';
+const MAX_DAYS = 15;   // phải khớp MAX_DAYS của API
+
+const $ = id => document.getElementById(id);
+let rows = [];
+let lastTruncated = false;
+
+const LABELS = {
+  Ten_nha_hang: 'Chi nhánh', So_phieu: 'Số phiếu', Gio_vao: 'Giờ vào', Thoi_gian_dong_phieu: 'TG đóng phiếu',
+  Khu: 'Khu', SL_khach: 'SL khách', Tien_hang: 'Tiền hàng', Phi_DV: '% Phí dv', Tien_phi_DV: 'Tiền phí dv',
+  Giam_chi_tiet: 'Giảm mặt hàng', Giam_phieu: 'Giảm phiếu', Tong_giam: 'Giảm giá',
+  Tien_truoc_thue: 'Tiền trước thuế', Thue_VAT: 'Thuế VAT', Tong_sau_thue: 'Tổng sau thuế',
+  Thuc_tra: 'Thực trả', Ghi_chu: 'Ghi chú'
+};
+const label = c => LABELS[c] || c;
+const TIME_COLS = /^(Gio_vao|Thoi_gian_dong_phieu)$/;
+// Thời gian trả về dạng ISO; hiển thị nguyên giá trị trong DB (không đổi múi giờ)
+const fmtVal = (k, v) => {
+  if (v === null || v === undefined) return '';
+  if (TIME_COLS.test(k)) return String(v).replace('T', ' ').slice(0, 19);
+  return v;
+};
+const fmtNum = v => (typeof v === 'number') ? v.toLocaleString('vi-VN', { maximumFractionDigits: 3 }) : v;
+// Các cột được cộng tổng (không cộng % Phí dv và Khu)
+const SUM_COLS = ['SL_khach','Tien_hang','Tien_phi_DV','Giam_chi_tiet','Giam_phieu','Tong_giam',
+                  'Tien_truoc_thue','Thue_VAT','Tong_sau_thue','Thuc_tra'];
+// Tổng trên TOÀN BỘ dòng API trả về (không phải một trang). Cộng theo đơn vị 1/1000 để tránh sai số số thực.
+function totals(rows) {
+  const s = Object.fromEntries(SUM_COLS.map(c => [c, 0]));
+  for (const r of rows) for (const c of SUM_COLS) s[c] += Math.round((Number(r[c]) || 0) * 1000);
+  return Object.fromEntries(SUM_COLS.map(c => [c, s[c] / 1000]));
+}
+const setMsg = (t, warn) => { $('msg').textContent = t; $('msg').className = warn ? 'warn' : ''; };
+
+const yesterday = new Date(Date.now() - 864e5).toISOString().slice(0, 10);
+$('fromDate').value = yesterday;
+$('toDate').value = yesterday;
+
+fetch(API + '/api/restaurants')
+  .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+  .then(list => {
+    $('rest').replaceChildren(
+      new Option('Tất cả', 'ALL'),
+      ...list.map(x => new Option(x.Ten_nha_hang, x.Ten_nha_hang)));
+  })
+  .catch(() => setMsg('Không tải được danh sách chi nhánh', true));
+
+$('btn').onclick = async () => {
+  const from = $('fromDate').value, to = $('toDate').value;
+  if (!from || !to) return setMsg('Hãy chọn Từ ngày và Đến ngày', true);
+  if (from > to) return setMsg('Từ ngày phải nhỏ hơn hoặc bằng Đến ngày', true);
+  const days = (Date.parse(to) - Date.parse(from)) / 864e5 + 1;
+  if (days > MAX_DAYS) return setMsg(`Chỉ được tìm tối đa ${MAX_DAYS} ngày mỗi lần`, true);
+
+  setMsg('Đang tìm...');
+  $('btn').disabled = true; $('dl').disabled = true;
+  let data;
+  try {
+    const url = `${API}/api/report?fromDate=${from}&toDate=${to}&restaurant=${encodeURIComponent($('rest').value)}`;
+    const r = await fetch(url);
+    if (r.status === 429) throw new Error('Bạn thao tác quá nhanh, thử lại sau ít phút');
+    if (r.status === 400) throw new Error((await r.json()).error || 'Tham số không hợp lệ');
+    if (!r.ok) throw new Error('Lỗi khi truy vấn, thử lại sau');
+    data = await r.json();
+  } catch (e) {
+    setMsg(e.message, true); $('btn').disabled = false; return;
+  }
+  $('btn').disabled = false;
+
+  rows = data.rows;
+  lastTruncated = !!data.truncated;
+  const tbl = $('tbl'); tbl.replaceChildren();
+  $('wrap').hidden = !rows.length;
+  if (!rows.length) return setMsg('Không có dữ liệu');
+  const cols = Object.keys(rows[0]);
+
+  const thead = tbl.createTHead().insertRow();
+  cols.forEach(c => { const th = document.createElement('th'); th.textContent = label(c); thead.appendChild(th); });
+
+  const tbody = tbl.createTBody();
+  rows.forEach(row => {
+    const tr = tbody.insertRow();
+    cols.forEach(c => {
+      const td = tr.insertCell();
+      td.textContent = fmtNum(fmtVal(c, row[c]));       // textContent: chống XSS
+      if (typeof row[c] === 'number') td.className = 'num';
+    });
+  });
+
+  // Dòng tổng cố định (tfoot sticky) — tính trên toàn bộ rows trả về
+  const sums = totals(rows);
+  const foot = tbl.createTFoot().insertRow();
+  cols.forEach((c, i) => {
+    const td = foot.insertCell();
+    if (i === 0) {
+      td.textContent = `TỔNG (${rows.length.toLocaleString('vi-VN')} phiếu${data.truncated ? ', chưa đủ' : ''})`;
+      if (data.truncated) td.className = 'warn';
+    } else if (SUM_COLS.includes(c)) {
+      td.textContent = fmtNum(sums[c]); td.className = 'num' + (data.truncated ? ' warn' : '');
+    } else if (data.truncated) td.className = 'warn';
+  });
+
+  if (data.truncated) {
+    setMsg(`Chỉ hiển thị ${data.limit.toLocaleString('vi-VN')} dòng đầu nên dòng TỔNG chưa phản ánh toàn bộ dữ liệu. Hãy thu hẹp khoảng ngày hoặc chọn một chi nhánh.`, true);
+  } else {
+    setMsg(`${rows.length.toLocaleString('vi-VN')} dòng`);
+  }
+  $('dl').disabled = false;
+};
+
+$('dl').onclick = () => {
+  const cols = Object.keys(rows[0]);
+  const esc = v => {
+    let s = String(v ?? '');
+    if (typeof v === 'string' && /^[=+\-@]/.test(s)) s = "'" + s;   // chống CSV injection (không đụng tới số âm)
+    return `"${s.replace(/"/g, '""')}"`;
+  };
+  // Dòng TỔNG ở cuối file, cùng cách tính với dòng TỔNG trên lưới (trên toàn bộ rows trả về)
+  const sums = totals(rows);
+  const totalRow = cols.map((c, i) =>
+    i === 0 ? `TỔNG (${rows.length} phiếu${lastTruncated ? ', chưa đủ' : ''})` : (SUM_COLS.includes(c) ? sums[c] : ''));
+  const csv = [cols.map(c => esc(label(c))).join(','),
+               ...rows.map(r => cols.map(c => esc(fmtVal(c, r[c]))).join(',')),
+               totalRow.map(esc).join(',')].join('\r\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }));  // BOM để Excel đọc đúng tiếng Việt
+  a.download = `baocao_${$('fromDate').value}_${$('toDate').value}_${$('rest').value}.csv`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+};
+</script>
+</body>
+</html>
