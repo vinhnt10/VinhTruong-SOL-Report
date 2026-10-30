@@ -14,6 +14,15 @@
   h1 { font-size:20px; margin:0; }
   .back { font-size:13px; color:var(--accent); text-decoration:none; white-space:nowrap; }
   .back:hover { text-decoration:underline; }
+  .info { align-self:center; width:26px; height:26px; padding:0; border-radius:50%; border:1.5px solid var(--accent); color:var(--accent);
+          background:#fff; font:italic 700 15px/1 Georgia, serif; }
+  .info:hover, .info:focus-visible { background:var(--accent); color:#fff; outline:none; }
+  dialog.rules { border:1px solid var(--line); border-radius:12px; width:min(600px, calc(100% - 32px)); max-height:85vh; padding:20px 24px; color:var(--fg); }
+  dialog.rules::backdrop { background:rgba(15,20,35,.4); }
+  dialog.rules h2 { font-size:17px; margin:0 0 10px; }
+  dialog.rules ul { margin:0 0 16px; padding-left:20px; font-size:14px; line-height:1.5; }
+  dialog.rules li { margin:6px 0; }
+  dialog.rules .close { float:right; }
   .bar { display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; background:var(--card);
          border:1px solid var(--line); border-radius:10px; padding:14px; }
   label { display:flex; flex-direction:column; gap:4px; font-size:12px; color:var(--muted); }
@@ -36,7 +45,8 @@
 </head>
 <body>
 <main>
-  <div class="top"><a class="back" href="index.html">&larr; Trang chủ</a><h1>Doanh thu theo SDT khách</h1></div>
+  <div class="top"><a class="back" href="index.html">&larr; Trang chủ</a><h1>Doanh thu theo SDT khách</h1>
+    <button type="button" class="info" id="infoBtn" aria-label="Xem quy tắc của báo cáo này" title="Quy tắc">i</button></div>
   <div class="bar">
     <label>Số điện thoại<input type="tel" id="phone" inputmode="numeric" autocomplete="off" placeholder="VD: 0901234567" maxlength="15"></label>
     <label>Từ ngày<input type="date" id="fromDate"></label>
@@ -48,12 +58,37 @@
   <div class="wrap" id="wrap" hidden><table id="tbl"></table></div>
 </main>
 
+<dialog class="rules" id="rules">
+  <h2>Quy tắc: Doanh thu theo SDT khách</h2>
+  <ul id="rulesList"></ul>
+  <form method="dialog"><button class="close primary">Đóng</button></form>
+</dialog>
+
 <script>
 // >>> Đổi thành domain API của bạn (không có dấu / ở cuối)
 const API = 'https://report-api.orderpermillion.trade';
-const MAX_DAYS = 31;   // phải khớp MAX_DAYS_SDT của API
+const MAX_DAYS = 186;   // 6 tháng; phải khớp MAX_DAYS_SDT của API
 
 const $ = id => document.getElementById(id);
+
+// ===== Quy tắc của trang này (bấm nút "i" để xem). Đổi quy tắc thì sửa danh sách này =====
+const RULES = [
+  'Số điện thoại: nhập 8 đến 15 chữ số. Khoảng trắng, dấu chấm, dấu gạch được tự bỏ. Hệ thống tìm khớp chính xác SĐT khách, không tìm gần đúng.',
+  `Khoảng ngày: tối đa 6 tháng (${MAX_DAYS} ngày) mỗi lần tìm, tính cả Từ ngày và Đến ngày. Mặc định là 7 ngày gần nhất.`,
+  'Ngày được lọc theo thời điểm đóng phiếu (đóng bill) của khách.',
+  'Chỉ gồm bill đã đóng, của khách có lưu SĐT, và xác định được chi nhánh từ số phiếu. Bill không xác định được chi nhánh (khoảng 7%) sẽ không hiện.',
+  'Vị trí là mã bàn của phiếu. Phiếu có nhiều bàn thì hiện các mã cách nhau bằng dấu phẩy.',
+  'Phí giao hàng: hiện chưa có dữ liệu nguồn nên cột này để trống và cộng ra 0.',
+  'Dòng "Tổng N dòng" và dòng TỔNG cố định ở đáy bảng được tính trên toàn bộ kết quả tìm được, không phải theo từng trang.',
+  'Các cột không được cộng tổng: % Phí dv và Khu.',
+  'Lưới chỉ hiển thị tối đa 20.000 dòng đầu. Nếu vượt, hệ thống có cảnh báo nhưng dòng TỔNG vẫn tính đủ toàn bộ.',
+  'Download CSV gồm các dòng đang hiển thị và dòng TỔNG ở cuối. Tên file không chứa SĐT.',
+  'Giới hạn 10 lượt tìm mỗi phút. Thao tác quá nhanh sẽ bị tạm chặn vài phút.',
+  'Thông tin tên và SĐT khách là dữ liệu cá nhân: chỉ dùng cho công việc nội bộ, không chia sẻ ra ngoài.'
+];
+for (const t of RULES) { const li = document.createElement('li'); li.textContent = t; $('rulesList').appendChild(li); }
+$('infoBtn').onclick = () => $('rules').showModal();
+$('rules').addEventListener('click', e => { if (e.target === e.currentTarget) e.currentTarget.close(); });   // bấm ra ngoài để đóng
 let rows = [], totalsAll = {}, totalCount = 0, lastTruncated = false;
 
 const LABELS = {

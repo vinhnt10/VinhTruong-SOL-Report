@@ -14,6 +14,15 @@
   h1 { font-size:20px; margin:0; }
   .back { font-size:13px; color:var(--accent); text-decoration:none; white-space:nowrap; }
   .back:hover { text-decoration:underline; }
+  .info { align-self:center; width:26px; height:26px; padding:0; border-radius:50%; border:1.5px solid var(--accent); color:var(--accent);
+          background:#fff; font:italic 700 15px/1 Georgia, serif; }
+  .info:hover, .info:focus-visible { background:var(--accent); color:#fff; outline:none; }
+  dialog.rules { border:1px solid var(--line); border-radius:12px; width:min(600px, calc(100% - 32px)); max-height:85vh; padding:20px 24px; color:var(--fg); }
+  dialog.rules::backdrop { background:rgba(15,20,35,.4); }
+  dialog.rules h2 { font-size:17px; margin:0 0 10px; }
+  dialog.rules ul { margin:0 0 16px; padding-left:20px; font-size:14px; line-height:1.5; }
+  dialog.rules li { margin:6px 0; }
+  dialog.rules .close { float:right; }
   .bar { display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; background:var(--card);
          border:1px solid var(--line); border-radius:10px; padding:14px; }
   label { display:flex; flex-direction:column; gap:4px; font-size:12px; color:var(--muted); }
@@ -36,7 +45,8 @@
 </head>
 <body>
 <main>
-  <div class="top"><a class="back" href="index.html">&larr; Trang chủ</a><h1>Doanh thu theo NH</h1></div>
+  <div class="top"><a class="back" href="index.html">&larr; Trang chủ</a><h1>Doanh thu theo NH</h1>
+    <button type="button" class="info" id="infoBtn" aria-label="Xem quy tắc của báo cáo này" title="Quy tắc">i</button></div>
   <div class="bar">
     <label>Từ ngày<input type="date" id="fromDate"></label>
     <label>Đến ngày<input type="date" id="toDate"></label>
@@ -48,12 +58,35 @@
   <div class="wrap" id="wrap" hidden><table id="tbl"></table></div>
 </main>
 
+<dialog class="rules" id="rules">
+  <h2>Quy tắc: Doanh thu theo NH</h2>
+  <ul id="rulesList"></ul>
+  <form method="dialog"><button class="close primary">Đóng</button></form>
+</dialog>
+
 <script>
 // >>> Đổi thành domain API của bạn (không có dấu / ở cuối)
 const API = 'https://report-api.orderpermillion.trade';
 const MAX_DAYS = 11;   // phải khớp MAX_DAYS của API (.env)
 
 const $ = id => document.getElementById(id);
+
+// ===== Quy tắc của trang này (bấm nút "i" để xem). Đổi quy tắc thì sửa danh sách này =====
+const RULES = [
+  'Dữ liệu là các bill đã đóng, lọc theo thời điểm đóng phiếu (TG đóng phiếu).',
+  `Khoảng ngày: tối đa ${MAX_DAYS} ngày mỗi lần tìm, tính cả Từ ngày và Đến ngày. Nếu chọn quá, ngày còn lại được tự điều chỉnh.`,
+  'Chi nhánh: chọn "Tất cả" để lấy mọi chi nhánh, hoặc chọn một chi nhánh cụ thể. Danh sách chỉ gồm chi nhánh có bill trong 90 ngày gần nhất.',
+  'Lưới hiển thị tối đa 20.000 dòng. Nếu kết quả nhiều hơn, hệ thống cảnh báo và dòng TỔNG chỉ tính trên số dòng đang hiển thị (nền vàng). Khi đó hãy thu hẹp khoảng ngày hoặc chọn một chi nhánh.',
+  'Dòng TỔNG cố định ở đáy bảng, cộng trên toàn bộ dòng trả về, không theo từng trang.',
+  'Các cột không được cộng tổng: % Phí dv và Khu.',
+  'Giờ vào và TG đóng phiếu hiển thị đúng như dữ liệu trong hệ thống.',
+  'Download CSV gồm các dòng đang hiển thị và dòng TỔNG ở cuối file.',
+  'Giới hạn 30 yêu cầu mỗi phút. Thao tác quá nhanh sẽ bị tạm chặn vài phút.'
+];
+for (const t of RULES) { const li = document.createElement('li'); li.textContent = t; $('rulesList').appendChild(li); }
+$('infoBtn').onclick = () => $('rules').showModal();
+$('rules').addEventListener('click', e => { if (e.target === e.currentTarget) e.currentTarget.close(); });   // bấm ra ngoài để đóng
+
 let rows = [];
 let lastTruncated = false;
 
