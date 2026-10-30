@@ -51,7 +51,7 @@
 <script>
 // >>> Đổi thành domain API của bạn (không có dấu / ở cuối)
 const API = 'https://report-api.orderpermillion.trade';
-const MAX_DAYS = 15;   // phải khớp MAX_DAYS của API
+const MAX_DAYS = 11;   // phải khớp MAX_DAYS của API (.env)
 
 const $ = id => document.getElementById(id);
 let rows = [];
@@ -87,6 +87,24 @@ const setMsg = (t, warn) => { $('msg').textContent = t; $('msg').className = war
 const yesterday = new Date(Date.now() - 864e5).toISOString().slice(0, 10);
 $('fromDate').value = yesterday;
 $('toDate').value = yesterday;
+
+// Tự giữ khoảng ngày trong MAX_DAYS: đổi một đầu thì đầu kia được kéo lại cho hợp lệ
+const addDays = (s, n) => new Date(Date.parse(s) + n * 864e5).toISOString().slice(0, 10);
+function clampRange(changed) {
+  const f = $('fromDate'), t = $('toDate');
+  if (!f.value || !t.value) return;
+  const before = f.value + t.value;
+  if (changed === 'from') {
+    if (t.value < f.value) t.value = f.value;
+    else if (t.value > addDays(f.value, MAX_DAYS - 1)) t.value = addDays(f.value, MAX_DAYS - 1);
+  } else {
+    if (f.value > t.value) f.value = t.value;
+    else if (f.value < addDays(t.value, -(MAX_DAYS - 1))) f.value = addDays(t.value, -(MAX_DAYS - 1));
+  }
+  if (before !== f.value + t.value) setMsg(`Chỉ được chọn tối đa ${MAX_DAYS} ngày mỗi lần, ngày còn lại đã được tự điều chỉnh`, true);
+}
+$('fromDate').addEventListener('change', () => clampRange('from'));
+$('toDate').addEventListener('change', () => clampRange('to'));
 
 fetch(API + '/api/restaurants')
   .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
