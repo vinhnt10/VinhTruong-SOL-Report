@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tổng doanh thu 6 tháng gom theo SDT</title>
+<style>
+  :root { --bg:#f7f8fa; --card:#fff; --line:#e3e6eb; --fg:#1b1f29; --muted:#6a7285; --accent:#2f5bea; }
+  * { box-sizing: border-box; }
+  html, body { height:100%; }
+  body { margin:0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background:var(--bg); color:var(--fg); }
+  main { height:100vh; display:flex; flex-direction:column; padding:16px 20px; }   /* full màn hình */
+  .top { display:flex; align-items:baseline; gap:16px; margin:0 0 12px; }
+  h1 { font-size:20px; margin:0; }
+  .back { font-size:13px; color:var(--accent); text-decoration:none; white-space:nowrap; }
+  .back:hover { text-decoration:underline; }
+  .info { align-self:center; width:26px; height:26px; padding:0; border-radius:50%; border:1.5px solid var(--accent); color:var(--accent);
+          background:#fff; font:italic 700 15px/1 Georgia, serif; }
+  .info:hover, .info:focus-visible { background:var(--accent); color:#fff; outline:none; }
+  dialog.rules { border:1px solid var(--line); border-radius:12px; width:min(620px, calc(100% - 32px)); max-height:85vh; padding:20px 24px; color:var(--fg); }
+  dialog.rules::backdrop { background:rgba(15,20,35,.4); }
+  dialog.rules h2 { font-size:17px; margin:0 0 10px; }
+  dialog.rules ul { margin:0 0 16px; padding-left:20px; font-size:14px; line-height:1.5; }
+  dialog.rules li { margin:6px 0; }
+  dialog.rules .close { float:right; }
+  .bar { display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; background:var(--card);
+         border:1px solid var(--line); border-radius:10px; padding:14px; }
+  label { display:flex; flex-direction:column; gap:4px; font-size:12px; color:var(--muted); }
+  input, button { font:inherit; padding:8px 12px; border:1px solid var(--line); border-radius:8px; background:#fff; color:var(--fg); }
+  button { cursor:pointer; }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  button:disabled { opacity:.5; cursor:not-allowed; }
+  #msg { margin:10px 2px; font-size:13px; color:var(--muted); min-height:18px; }
+  #msg.warn { color:#b45309; }
+  .wrap { flex:1; min-height:0; overflow:auto; background:var(--card); border:1px solid var(--line); border-radius:10px; }
+  table { border-collapse:separate; border-spacing:0; width:100%; }
+  th, td { padding:8px 12px; font-size:13px; border-bottom:1px solid var(--line); text-align:left; white-space:nowrap; }
+  th { position:sticky; top:0; background:#f1f3f7; z-index:2; }
+  td.num { text-align:right; font-variant-numeric: tabular-nums; }
+  tfoot td { position:sticky; bottom:0; z-index:2; background:#e8eefc; font-weight:700; border-top:2px solid var(--accent); border-bottom:0; }
+  tfoot td.warn { background:#fef3c7; }
+</style>
+</head>
+<body>
+<main>
+  <div class="top"><a class="back" href="index.html">&larr; Trang chủ</a><h1>Tổng doanh thu 6 tháng gom theo SDT</h1>
+    <button type="button" class="info" id="infoBtn" aria-label="Xem quy tắc của báo cáo này" title="Quy tắc">i</button></div>
+  <div class="bar">
+    <label>Từ ngày<input type="date" id="fromDate"></label>
+    <label>Đến ngày<input type="date" id="toDate"></label>
+    <label>Số điện thoại (có thể để trống)<input type="tel" id="phone" inputmode="numeric" autocomplete="off" placeholder="VD: 0901234567" maxlength="15"></label>
+    <label>Tên khách, gần đúng (có thể để trống)<input type="text" id="name" autocomplete="off" placeholder="VD: nguyen van" maxlength="50"></label>
+    <button id="btn" class="primary">Tìm</button>
+    <button id="dl" disabled>Download CSV</button>
+  </div>
+  <div id="msg"></div>
+  <div class="wrap" id="wrap" hidden><table id="tbl"></table></div>
+</main>
+
+<dialog class="rules" id="rules">
+  <h2>Quy tắc: Tổng doanh thu 6 tháng gom theo SDT</h2>
+  <ul id="rulesList"></ul>
+  <form method="dialog"><button class="close primary">Đóng</button></form>
+</dialog>
+
+<script>
+// >>> Đổi thành domain API của bạn (không có dấu / ở cuối)
+const API = 'https://report-api.orderpermillion.trade';
+const MAX_DAYS = 186;   // 6 tháng; phải khớp MAX_DAYS_NUT3 của API
+
+const $ = id => document.getElementById(id);
+
+// ===== Quy tắc của trang này (bấm nút "i" để xem). Đổi quy tắc thì sửa danh sách này =====
+const RULES = [
+  `Khoảng ngày: tối đa 6 tháng (${MAX_DAYS} ngày) mỗi lần tìm, tính cả Từ ngày và Đến ngày. Mặc định là 3 tháng gần nhất.`,
+  'Không nhập SDT và không nhập tên: hiển thị tất cả SDT có bill trong khoảng ngày, mỗi SDT một dòng.',
+  'Nhập SDT: chỉ hiển thị đúng SDT đó (8 đến 15 chữ số, khoảng trắng, dấu chấm, dấu gạch được tự bỏ). Nếu SDT không có trong hệ thống, trang báo "SDT không tồn tại"; nếu SDT có nhưng không có bill trong khoảng ngày, trang báo riêng.',
+  'Nhập tên khách (tối thiểu 2 ký tự): tìm gần đúng, không phân biệt hoa thường và dấu tiếng Việt, chỉ cần tên chứa cụm đã nhập. Có thể nhập kèm SDT, khi đó phải thỏa cả hai.',
+  'Khi tìm theo tên, các SDT khớp được tính đủ toàn bộ bill của SDT đó trong khoảng ngày, không chỉ bill của profile có tên trùng.',
+  'Chỉ tính bill đã đóng, chưa huỷ, của khách có lưu SĐT. Các SDT được chuẩn hoá (bỏ khoảng trắng, dấu chấm, dấu gạch) rồi gom lại.',
+  'Một SDT có thể có nhiều profile khách. "Số profile" là số profile đang dùng chung SDT; "Tên KH" là một tên đại diện.',
+  'Tổng doanh thu và Trung bình bill tính trên Thực trả (số tiền khách trả sau khuyến mãi). Bill cuối là bill có thời điểm đóng muộn nhất của SDT.',
+  '"NH bill cuối" để trống nếu chi nhánh không xác định được từ số phiếu. "SL NH ghé" là số chi nhánh khác nhau trong khoảng ngày.',
+  'Danh sách xếp theo Tổng doanh thu giảm dần. Lưới hiển thị tối đa 20.000 SDT; dòng TỔNG và số SDT ở dòng thông báo vẫn tính trên toàn bộ kết quả.',
+  'Dòng TỔNG cố định ở đáy bảng: cộng Tổng số bill và Tổng doanh thu; Trung bình bill = Tổng doanh thu chia Tổng số bill. Các cột còn lại không cộng.',
+  'Download CSV gồm các dòng đang hiển thị và dòng TỔNG ở cuối. Tên file không chứa SDT hay tên khách.',
+  'Giới hạn 6 lượt tìm mỗi phút. Thao tác quá nhanh sẽ bị tạm chặn vài phút.',
+  'SDT và tên khách là dữ liệu cá nhân: chỉ dùng cho công việc nội bộ, không chia sẻ ra ngoài.'
+];
+for (const t of RULES) { const li = document.createElement('li'); li.textContent = t; $('rulesList').appendChild(li); }
+$('infoBtn').onclick = () => $('rules').showModal();
+$('rules').addEventListener('click', e => { if (e.target === e.currentTarget) e.currentTarget.close(); });   // bấm ra ngoài để đóng
+
+let rows = [], totalsAll = {}, totalCount = 0, lastTruncated = false;
+
+const LABELS = {
+  sdt: 'SDT', ten_khach: 'Tên KH', so_profile: 'Số profile', Tong_so_bill: 'Tổng số bill', Tong_doanh_thu: 'Tổng doanh thu',
+  Trung_binh_bill: 'Trung bình bill', Bill_dau_tien: 'Bill đầu tiên', SL_NH_ghe: 'SL NH ghé', Ngay_bill_cuoi: 'Ngày bill cuối',
+  Ma_bill_cuoi: 'Mã bill cuối', NH_bill_cuoi: 'NH bill cuối', GiaTri_bill_cuoi: 'Giá trị bill cuối'
+};
+const label = c => LABELS[c] || c;
+const DATE_COLS = /^(Bill_dau_tien|Ngay_bill_cuoi)$/;
+const fmtVal = (k, v) => {
+  if (v === null || v === undefined) return '';
+  if (DATE_COLS.test(k)) return String(v).slice(0, 10);     // ngày trả về dạng ISO, hiển thị nguyên ngày trong DB
+  return v;
+};
+const fmtNum = v => (typeof v === 'number') ? v.toLocaleString('vi-VN', { maximumFractionDigits: 3 }) : v;
+const setMsg = (t, warn) => { $('msg').textContent = t; $('msg').className = warn ? 'warn' : ''; };
+const cleanPhone = () => $('phone').value.replace(/[\s.\-]/g, '');
+const fmtInt = n => n.toLocaleString('vi-VN');
+
+// Mặc định: 3 tháng gần nhất
+const now = new Date();
+const from3m = new Date(now); from3m.setMonth(from3m.getMonth() - 3);
+$('fromDate').value = from3m.toISOString().slice(0, 10);
+$('toDate').value = now.toISOString().slice(0, 10);
+for (const id of ['phone', 'name']) $(id).addEventListener('keydown', e => { if (e.key === 'Enter') $('btn').click(); });
+
+// Tự giữ khoảng ngày trong MAX_DAYS: đổi một đầu thì đầu kia được kéo lại cho hợp lệ
+const addDays = (s, n) => new Date(Date.parse(s) + n * 864e5).toISOString().slice(0, 10);
+function clampRange(changed) {
+  const f = $('fromDate'), t = $('toDate');
+  if (!f.value || !t.value) return;
+  const before = f.value + t.value;
+  if (changed === 'from') {
+    if (t.value < f.value) t.value = f.value;
+    else if (t.value > addDays(f.value, MAX_DAYS - 1)) t.value = addDays(f.value, MAX_DAYS - 1);
+  } else {
+    if (f.value > t.value) f.value = t.value;
+    else if (f.value < addDays(t.value, -(MAX_DAYS - 1))) f.value = addDays(t.value, -(MAX_DAYS - 1));
+  }
+  if (before !== f.value + t.value) setMsg('Chỉ được chọn tối đa 6 tháng mỗi lần, ngày còn lại đã được tự điều chỉnh', true);
+}
+$('fromDate').addEventListener('change', () => clampRange('from'));
+$('toDate').addEventListener('change', () => clampRange('to'));
+
+// Dòng tổng: Trung bình bill = Tổng doanh thu / Tổng số bill (không cộng các cột trung bình)
+const footValue = c => {
+  if (c === 'Tong_so_bill') return totalsAll.Tong_so_bill;
+  if (c === 'Tong_doanh_thu') return totalsAll.Tong_doanh_thu;
+  if (c === 'Trung_binh_bill') return totalsAll.Tong_so_bill ? Math.round(totalsAll.Tong_doanh_thu / totalsAll.Tong_so_bill) : 0;
+  return null;
+};
+
+$('btn').onclick = async () => {
+  const phone = cleanPhone(), name = $('name').value.trim().replace(/\s+/g, ' ');
+  const from = $('fromDate').value, to = $('toDate').value;
+  if (phone && !/^\d{8,15}$/.test(phone)) return setMsg('Số điện thoại không hợp lệ (chỉ gồm 8 đến 15 chữ số)', true);
+  if (name && name.length < 2) return setMsg('Tên khách phải có ít nhất 2 ký tự', true);
+  if (!from || !to) return setMsg('Hãy chọn Từ ngày và Đến ngày', true);
+  if (from > to) return setMsg('Từ ngày phải nhỏ hơn hoặc bằng Đến ngày', true);
+  const days = (Date.parse(to) - Date.parse(from)) / 864e5 + 1;
+  if (days > MAX_DAYS) return setMsg('Chỉ được tìm tối đa 6 tháng mỗi lần', true);
+
+  setMsg('Đang tìm...');
+  $('btn').disabled = true; $('dl').disabled = true;
+  let data;
+  try {
+    let url = `${API}/api/revenue-by-customer?fromDate=${from}&toDate=${to}`;
+    if (phone) url += `&phone=${encodeURIComponent(phone)}`;
+    if (name) url += `&name=${encodeURIComponent(name)}`;
+    const r = await fetch(url);
+    if (r.status === 429) throw new Error('Bạn thao tác quá nhanh, thử lại sau ít phút');
+    if (r.status === 400) throw new Error((await r.json()).error || 'Tham số không hợp lệ');
+    if (!r.ok) throw new Error('Lỗi khi truy vấn, thử lại sau');
+    data = await r.json();
+  } catch (e) {
+    setMsg(e.message, true); $('btn').disabled = false; return;
+  }
+  $('btn').disabled = false;
+
+  rows = data.rows; totalsAll = data.totals; totalCount = data.total; lastTruncated = !!data.truncated;
+  const tbl = $('tbl'); tbl.replaceChildren();
+  $('wrap').hidden = !rows.length;
+  if (!rows.length) {
+    if (phone && data.phoneExists === false) return setMsg('SDT không tồn tại trong hệ thống', true);
+    if (phone && data.phoneExists === true) return setMsg('SDT có trong hệ thống nhưng không có bill nào trong khoảng ngày đã chọn', true);
+    return setMsg('Không có dữ liệu');
+  }
+  const cols = Object.keys(rows[0]);
+
+  const thead = tbl.createTHead().insertRow();
+  cols.forEach(c => { const th = document.createElement('th'); th.textContent = label(c); thead.appendChild(th); });
+
+  const tbody = tbl.createTBody();
+  rows.forEach(row => {
+    const tr = tbody.insertRow();
+    cols.forEach(c => {
+      const td = tr.insertCell();
+      const v = fmtVal(c, row[c]);
+      td.textContent = c === 'sdt' ? v : fmtNum(v);       // textContent: chống XSS; SDT giữ nguyên số 0 đầu
+      if (typeof row[c] === 'number') td.className = 'num';
+    });
+  });
+
+  // Dòng tổng cố định (tfoot sticky) — số liệu do API tính trên TOÀN BỘ kết quả
+  const foot = tbl.createTFoot().insertRow();
+  cols.forEach((c, i) => {
+    const td = foot.insertCell();
+    if (i === 0) td.textContent = `TỔNG (${fmtInt(totalCount)} SDT)`;
+    else { const v = footValue(c); if (v !== null) { td.textContent = fmtNum(v); td.className = 'num'; } }
+  });
+
+  if (lastTruncated) {
+    setMsg(`Tổng ${fmtInt(totalCount)} SDT. Chỉ hiển thị ${fmtInt(data.limit)} SDT có doanh thu cao nhất; dòng TỔNG vẫn tính trên toàn bộ ${fmtInt(totalCount)} SDT.`, true);
+  } else {
+    setMsg(`Tổng ${fmtInt(totalCount)} SDT`);
+  }
+  $('dl').disabled = false;
+};
+
+$('dl').onclick = () => {
+  const cols = Object.keys(rows[0]);
+  const esc = v => {
+    let s = String(v ?? '');
+    if (typeof v === 'string' && /^[=+\-@]/.test(s)) s = "'" + s;   // chống CSV injection (không đụng tới số âm)
+    return `"${s.replace(/"/g, '""')}"`;
+  };
+  // SDT bọc thành ="0901234567" để Excel không làm mất số 0 đầu
+  const cell = (c, v) => c === 'sdt' ? `="${String(v ?? '')}"` : esc(fmtVal(c, v));
+  const totalRow = cols.map((c, i) => {
+    if (i === 0) return esc(`TỔNG (${totalCount} SDT${lastTruncated ? `; file chỉ có ${rows.length} dòng đầu` : ''})`);
+    const v = footValue(c); return esc(v === null ? '' : v);
+  });
+  const csv = [cols.map(c => esc(label(c))).join(','),
+               ...rows.map(r => cols.map(c => cell(c, r[c])).join(',')),
+               totalRow.join(',')].join('\r\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }));  // BOM để Excel đọc đúng tiếng Việt
+  a.download = `doanhthu_theo_sdt_${$('fromDate').value}_${$('toDate').value}.csv`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+};
+</script>
+</body>
+</html>
