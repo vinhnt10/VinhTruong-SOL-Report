@@ -9,7 +9,8 @@ const DEPTS = [
     { name: 'Doanh thu chi tiết theo SDT', desc: 'Tra cứu bill và doanh thu của một số điện thoại khách trong khoảng ngày.', href: 'doanh-thu-sdt.html' },
     { name: 'Tổng doanh thu 6 tháng gom theo SDT', desc: 'Mỗi SDT một dòng: số bill, tổng doanh thu, bill cuối. Tìm theo SDT hoặc tên khách gần đúng.', href: 'doanh-thu-6-thang-theo-sdt.html' },
     { name: 'Tổng doanh thu từng NH theo tháng', desc: 'Số bill, tiền hàng, giảm giá, phí dịch vụ, VAT và doanh thu của từng chi nhánh trong một tháng.', href: 'doanh-thu-nh-theo-thang.html' },
-    { name: 'Số lượng KH phát sinh trong tháng', desc: 'Khách hàng tạo mới trong tháng, kèm thẻ thành viên, điểm, doanh số tích luỹ. Lọc theo chi nhánh, loại thẻ, có dùng thẻ.', href: 'so-luong-kh-phat-sinh-thang.html' }
+    { name: 'Số lượng KH phát sinh trong tháng', desc: 'Khách hàng tạo mới trong tháng, kèm thẻ thành viên, điểm, doanh số tích luỹ. Lọc theo chi nhánh, loại thẻ, có dùng thẻ.', href: 'so-luong-kh-phat-sinh-thang.html' },
+    { name: 'Tổng doanh thu từng NH theo coupon sinh nhật', desc: 'Số bill dùng coupon sinh nhật (giảm 50k, giảm 200k), doanh thu và giảm giá của từng chi nhánh trong một tháng.', href: 'doanh-thu-nh-coupon-sinh-nhat.html' }
   ] },
   { id: 'hr', name: 'HR', pages: [] },
   { id: 'ke-toan', name: 'Kế toán', pages: [] },

@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tổng doanh thu từng NH theo coupon sinh nhật</title>
+<style>
+  :root { --bg:#f7f8fa; --card:#fff; --line:#e3e6eb; --fg:#1b1f29; --muted:#6a7285; --accent:#2f5bea; }
+  * { box-sizing: border-box; }
+  html, body { height:100%; }
+  body { margin:0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background:var(--bg); color:var(--fg); }
+  main { height:100vh; display:flex; flex-direction:column; padding:16px 20px; }   /* full màn hình */
+  .top { display:flex; align-items:baseline; gap:16px; margin:0 0 12px; }
+  h1 { font-size:20px; margin:0; }
+  .back { font-size:13px; color:var(--accent); text-decoration:none; white-space:nowrap; }
+  .back:hover { text-decoration:underline; }
+  .info { align-self:center; width:26px; height:26px; padding:0; border-radius:50%; border:1.5px solid var(--accent); color:var(--accent);
+          background:#fff; font:italic 700 15px/1 Georgia, serif; }
+  .info:hover, .info:focus-visible { background:var(--accent); color:#fff; outline:none; }
+  dialog.rules { border:1px solid var(--line); border-radius:12px; width:min(620px, calc(100% - 32px)); max-height:85vh; padding:20px 24px; color:var(--fg); }
+  dialog.rules::backdrop { background:rgba(15,20,35,.4); }
+  dialog.rules h2 { font-size:17px; margin:0 0 10px; }
+  dialog.rules ul { margin:0 0 16px; padding-left:20px; font-size:14px; line-height:1.5; }
+  dialog.rules li { margin:6px 0; }
+  dialog.rules .close { float:right; }
+  .bar { display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; background:var(--card);
+         border:1px solid var(--line); border-radius:10px; padding:14px; }
+  label { display:flex; flex-direction:column; gap:4px; font-size:12px; color:var(--muted); }
+  input, select, button { font:inherit; padding:8px 12px; border:1px solid var(--line); border-radius:8px; background:#fff; color:var(--fg); }
+  select { min-width:220px; }
+  button { cursor:pointer; }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  button:disabled { opacity:.5; cursor:not-allowed; }
+  #msg { margin:10px 2px; font-size:13px; color:var(--muted); min-height:18px; }
+  #msg.warn { color:#b45309; }
+  .wrap { flex:1; min-height:0; overflow:auto; background:var(--card); border:1px solid var(--line); border-radius:10px; }
+  table { border-collapse:separate; border-spacing:0; width:100%; }
+  th, td { padding:8px 12px; font-size:13px; border-bottom:1px solid var(--line); text-align:left; white-space:nowrap; }
+  th { position:sticky; top:0; background:#f1f3f7; z-index:2; }
+  td.num, th.num { text-align:right; font-variant-numeric: tabular-nums; }
+  tfoot td { position:sticky; bottom:0; z-index:2; background:#e8eefc; font-weight:700; border-top:2px solid var(--accent); border-bottom:0; }
+</style>
+</head>
+<body>
+<main>
+  <div class="top"><a class="back" href="phong-ban.html?d=mkt">&larr; MKT</a><h1>Tổng doanh thu từng NH theo coupon sinh nhật</h1>
+    <button type="button" class="info" id="infoBtn" aria-label="Xem quy tắc của báo cáo này" title="Quy tắc">i</button></div>
+  <div class="bar">
+    <label>Tháng<input type="month" id="month"></label>
+    <label>Chi nhánh<select id="rest"><option value="ALL">Tất cả</option></select></label>
+    <button id="btn" class="primary">Tìm</button>
+    <button id="dl" disabled>Download CSV</button>
+  </div>
+  <div id="msg"></div>
+  <div class="wrap" id="wrap" hidden><table id="tbl"></table></div>
+</main>
+
+<dialog class="rules" id="rules">
+  <h2>Quy tắc: Tổng doanh thu từng NH theo coupon sinh nhật</h2>
+  <ul id="rulesList"></ul>
+  <form method="dialog"><button class="close primary">Đóng</button></form>
+</dialog>
+
+<script>
+// >>> Đổi thành domain API của bạn (không có dấu / ở cuối)
+const API = 'https://report-api.orderpermillion.trade';
+const MAX_MONTHS = 3;   // tháng hiện tại + 2 tháng trước; phải khớp MAX_MONTHS_NUT6 của API
+
+const $ = id => document.getElementById(id);
+
+// ===== Quy tắc của trang này (bấm nút "i" để xem). Đổi quy tắc thì sửa danh sách này =====
+const RULES = [
+  `Chỉ tìm theo tháng: chọn tháng hiện tại hoặc ${MAX_MONTHS - 1} tháng trước đó (tối đa ${MAX_MONTHS} tháng tính từ tháng hiện tại). Mặc định là tháng hiện tại.`,
+  'Chi nhánh: mặc định "Tất cả" (mỗi chi nhánh một dòng); chọn một chi nhánh để chỉ xem chi nhánh đó. Danh sách chỉ gồm chi nhánh có bill coupon sinh nhật trong 6 tháng gần đây.',
+  'Chỉ tính bill có áp coupon sinh nhật (mã dạng KSN + 4 chữ số) và ưu đãi sinh nhật còn nguyên khi chốt bill: loại ưu đãi giảm 50k hoặc giảm 200k. Bill đã bị đổi hoặc bỏ ưu đãi sau khi áp coupon không được tính.',
+  'Tháng được tính theo ngày doanh thu của bill: từ ngày 1 đến hết ngày cuối tháng. Chỉ tính bill chưa huỷ.',
+  'Bill giảm 50k và Bill giảm 200k là số bill theo từng loại ưu đãi; Số bill là tổng hai loại.',
+  'Doanh thu sau VAT là số tiền khách thực trả. Doanh thu trước VAT = Doanh thu sau VAT trừ VAT. Giảm giá là tổng giảm giá của các bill này (gồm cả giảm giá khác nếu bill có).',
+  'Danh sách xếp theo Doanh thu sau VAT giảm dần.',
+  'Dòng TỔNG cố định ở đáy bảng, cộng tất cả các dòng của kết quả.',
+  'Download CSV gồm các dòng đang hiển thị và dòng TỔNG ở cuối file.',
+  'Giới hạn 20 lượt tìm mỗi phút. Thao tác quá nhanh sẽ bị tạm chặn vài phút.'
+];
+for (const t of RULES) { const li = document.createElement('li'); li.textContent = t; $('rulesList').appendChild(li); }
+$('infoBtn').onclick = () => $('rules').showModal();
+$('rules').addEventListener('click', e => { if (e.target === e.currentTarget) e.currentTarget.close(); });   // bấm ra ngoài để đóng
+
+let rows = [], totalsAll = {};
+
+const LABELS = {
+  ten_nha_hang: 'Chi nhánh', so_bill: 'Số bill', bill_giam_50k: 'Bill giảm 50k', bill_giam_200k: 'Bill giảm 200k',
+  doanh_thu_sau_vat: 'Doanh thu sau VAT', doanh_thu_truoc_vat: 'Doanh thu trước VAT', giam_gia: 'Giảm giá'
+};
+const label = c => LABELS[c] || c;
+const fmtNum = v => (typeof v === 'number') ? v.toLocaleString('vi-VN', { maximumFractionDigits: 3 }) : v;
+const setMsg = (t, warn) => { $('msg').textContent = t; $('msg').className = warn ? 'warn' : ''; };
+
+// Chọn tháng: từ (tháng hiện tại − (MAX_MONTHS − 1)) đến tháng hiện tại
+const ym = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+const nowD = new Date();
+const minD = new Date(nowD.getFullYear(), nowD.getMonth() - (MAX_MONTHS - 1), 1);
+$('month').max = ym(nowD);
+$('month').min = ym(minD);
+$('month').value = ym(nowD);
+
+fetch(API + '/api/coupon-sn-branches')
+  .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+  .then(list => {
+    $('rest').replaceChildren(
+      new Option('Tất cả', 'ALL'),
+      ...list.map(x => new Option(x.ten_nha_hang, String(x.ma_nh))));
+  })
+  .catch(() => setMsg('Không tải được danh sách chi nhánh', true));
+
+$('btn').onclick = async () => {
+  const month = $('month').value;
+  if (!/^\d{4}-\d{2}$/.test(month)) return setMsg('Hãy chọn tháng', true);
+  if (month > $('month').max || month < $('month').min) {
+    return setMsg(`Chỉ được tìm từ ${$('month').min} đến ${$('month').max} (tối đa ${MAX_MONTHS} tháng từ tháng hiện tại)`, true);
+  }
+
+  setMsg('Đang tìm...');
+  $('btn').disabled = true; $('dl').disabled = true;
+  let data;
+  try {
+    const r = await fetch(`${API}/api/revenue-coupon-sn?month=${month}&org=${encodeURIComponent($('rest').value)}`);
+    if (r.status === 429) throw new Error('Bạn thao tác quá nhanh, thử lại sau ít phút');
+    if (r.status === 400) throw new Error((await r.json()).error || 'Tham số không hợp lệ');
+    if (!r.ok) throw new Error('Lỗi khi truy vấn, thử lại sau');
+    data = await r.json();
+  } catch (e) {
+    setMsg(e.message, true); $('btn').disabled = false; return;
+  }
+  $('btn').disabled = false;
+
+  rows = data.rows; totalsAll = data.totals;
+  const tbl = $('tbl'); tbl.replaceChildren();
+  $('wrap').hidden = !rows.length;
+  if (!rows.length) return setMsg('Không có bill coupon sinh nhật nào trong tháng đã chọn');
+  const cols = Object.keys(rows[0]);
+
+  const thead = tbl.createTHead().insertRow();
+  cols.forEach(c => { const th = document.createElement('th'); th.textContent = label(c); if (c !== 'ten_nha_hang') th.className = 'num'; thead.appendChild(th); });
+
+  const tbody = tbl.createTBody();
+  rows.forEach(row => {
+    const tr = tbody.insertRow();
+    cols.forEach(c => {
+      const td = tr.insertCell();
+      td.textContent = fmtNum(row[c] ?? '');       // textContent: chống XSS
+      if (typeof row[c] === 'number') td.className = 'num';
+    });
+  });
+
+  // Dòng tổng cố định (tfoot sticky) — số liệu do API tính trên toàn bộ các dòng
+  const foot = tbl.createTFoot().insertRow();
+  cols.forEach((c, i) => {
+    const td = foot.insertCell();
+    if (i === 0) td.textContent = `TỔNG (${rows.length.toLocaleString('vi-VN')} chi nhánh)`;
+    else { td.textContent = fmtNum(totalsAll[c]); td.className = 'num'; }
+  });
+
+  setMsg(`Tháng ${month.slice(5)}/${month.slice(0, 4)}: ${rows.length.toLocaleString('vi-VN')} chi nhánh, ${totalsAll.so_bill.toLocaleString('vi-VN')} bill coupon sinh nhật (${totalsAll.bill_giam_50k.toLocaleString('vi-VN')} bill giảm 50k, ${totalsAll.bill_giam_200k.toLocaleString('vi-VN')} bill giảm 200k)`);
+  $('dl').disabled = false;
+};
+
+$('dl').onclick = () => {
+  const cols = Object.keys(rows[0]);
+  const esc = v => {
+    let s = String(v ?? '');
+    if (typeof v === 'string' && /^[=+\-@]/.test(s)) s = "'" + s;   // chống CSV injection (không đụng tới số âm)
+    return `"${s.replace(/"/g, '""')}"`;
+  };
+  const totalRow = cols.map((c, i) => i === 0 ? `TỔNG (${rows.length} chi nhánh)` : totalsAll[c]);
+  const csv = [cols.map(c => esc(label(c))).join(','),
+               ...rows.map(r => cols.map(c => esc(r[c])).join(',')),
+               totalRow.map(esc).join(',')].join('\r\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }));  // BOM để Excel đọc đúng tiếng Việt
+  a.download = `coupon_sinh_nhat_${$('month').value}_${$('rest').selectedOptions[0].value}.csv`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+};
+</script>
+</body>
+</html>
