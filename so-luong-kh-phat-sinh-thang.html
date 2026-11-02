@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Số lượng KH phát sinh trong tháng</title>
+<style>
+  :root { --bg:#f7f8fa; --card:#fff; --line:#e3e6eb; --fg:#1b1f29; --muted:#6a7285; --accent:#2f5bea; }
+  * { box-sizing: border-box; }
+  html, body { height:100%; }
+  body { margin:0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background:var(--bg); color:var(--fg); }
+  main { height:100vh; display:flex; flex-direction:column; padding:16px 20px; }   /* full màn hình */
+  .top { display:flex; align-items:baseline; gap:16px; margin:0 0 12px; }
+  h1 { font-size:20px; margin:0; }
+  .back { font-size:13px; color:var(--accent); text-decoration:none; white-space:nowrap; }
+  .back:hover { text-decoration:underline; }
+  .info { align-self:center; width:26px; height:26px; padding:0; border-radius:50%; border:1.5px solid var(--accent); color:var(--accent);
+          background:#fff; font:italic 700 15px/1 Georgia, serif; }
+  .info:hover, .info:focus-visible { background:var(--accent); color:#fff; outline:none; }
+  dialog.rules { border:1px solid var(--line); border-radius:12px; width:min(640px, calc(100% - 32px)); max-height:85vh; padding:20px 24px; color:var(--fg); }
+  dialog.rules::backdrop { background:rgba(15,20,35,.4); }
+  dialog.rules h2 { font-size:17px; margin:0 0 10px; }
+  dialog.rules ul { margin:0 0 16px; padding-left:20px; font-size:14px; line-height:1.5; }
+  dialog.rules li { margin:6px 0; }
+  dialog.rules .close { float:right; }
+  .bar { display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; background:var(--card);
+         border:1px solid var(--line); border-radius:10px; padding:14px; }
+  label { display:flex; flex-direction:column; gap:4px; font-size:12px; color:var(--muted); }
+  input, select, button { font:inherit; padding:8px 12px; border:1px solid var(--line); border-radius:8px; background:#fff; color:var(--fg); }
+  select { min-width:180px; }
+  button { cursor:pointer; }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  button:disabled { opacity:.5; cursor:not-allowed; }
+  #msg { margin:10px 2px; font-size:13px; color:var(--muted); min-height:18px; }
+  #msg.warn { color:#b45309; }
+  .wrap { flex:1; min-height:0; overflow:auto; background:var(--card); border:1px solid var(--line); border-radius:10px; }
+  table { border-collapse:separate; border-spacing:0; width:100%; }
+  th, td { padding:8px 12px; font-size:13px; border-bottom:1px solid var(--line); text-align:left; white-space:nowrap; }
+  th { position:sticky; top:0; background:#f1f3f7; z-index:2; }
+  td.num, th.num { text-align:right; font-variant-numeric: tabular-nums; }
+  tfoot td { position:sticky; bottom:0; z-index:2; background:#e8eefc; font-weight:700; border-top:2px solid var(--accent); border-bottom:0; }
+  tfoot td.warn { background:#fef3c7; }
+</style>
+</head>
+<body>
+<main>
+  <div class="top"><a class="back" href="phong-ban.html?d=mkt">&larr; MKT</a><h1>Số lượng KH phát sinh trong tháng</h1>
+    <button type="button" class="info" id="infoBtn" aria-label="Xem quy tắc của báo cáo này" title="Quy tắc">i</button></div>
+  <div class="bar">
+    <label>Tháng<input type="month" id="month"></label>
+    <label>Chi nhánh (nơi dùng thẻ)<select id="rest"><option value="ALL">Tất cả</option></select></label>
+    <label>Loại thẻ<select id="card"><option value="ALL">Tất cả</option></select></label>
+    <label>Sử dụng thẻ trong tháng<select id="used"><option value="0">Không</option><option value="1">Có</option></select></label>
+    <button id="btn" class="primary">Tìm</button>
+    <button id="dl" disabled>Download CSV</button>
+  </div>
+  <div id="msg"></div>
+  <div class="wrap" id="wrap" hidden><table id="tbl"></table></div>
+</main>
+
+<dialog class="rules" id="rules">
+  <h2>Quy tắc: Số lượng KH phát sinh trong tháng</h2>
+  <ul id="rulesList"></ul>
+  <form method="dialog"><button class="close primary">Đóng</button></form>
+</dialog>
+
+<script>
+// >>> Đổi thành domain API của bạn (không có dấu / ở cuối)
+const API = 'https://report-api.orderpermillion.trade';
+const MAX_MONTHS = 3;   // tháng hiện tại + 2 tháng trước; phải khớp MAX_MONTHS_NUT5 của API
+
+const $ = id => document.getElementById(id);
+
+// ===== Quy tắc của trang này (bấm nút "i" để xem). Đổi quy tắc thì sửa danh sách này =====
+const RULES = [
+  `Chỉ tìm theo tháng: chọn tháng hiện tại hoặc ${MAX_MONTHS - 1} tháng trước đó (tối đa ${MAX_MONTHS} tháng tính từ tháng hiện tại). Mặc định là tháng hiện tại.`,
+  '"KH phát sinh trong tháng" là khách hàng được tạo mới trong tháng (theo ngày tạo khách), đang hoạt động, không tính các đơn vị/tổ chức.',
+  'Loại thẻ: mặc định "Tất cả" (gồm cả khách chưa có thẻ). Chọn một loại thẻ thì chỉ hiện khách có đúng loại thẻ đó.',
+  'Sử dụng thẻ trong tháng: "Không" (mặc định) là không lọc, hiển thị tất cả khách mới. "Có" chỉ hiển thị khách có thẻ đã được dùng trên ít nhất một bill chưa huỷ trong tháng (tính theo ngày doanh thu của bill).',
+  'Chi nhánh: hệ thống không lưu chi nhánh đăng ký của khách, nên chi nhánh ở đây là nơi khách dùng thẻ trong tháng. Chọn một chi nhánh thì chỉ hiện khách có dùng thẻ tại chi nhánh đó, tương đương đã chọn "Sử dụng thẻ = Có".',
+  'Cột "NH dùng thẻ" liệt kê các chi nhánh khách dùng thẻ trong tháng; "Số lần dùng trong tháng" là số bill dùng thẻ trong tháng. Còn "Số lần dùng" là số lần dùng thẻ tích luỹ từ trước đến nay.',
+  'Dòng TỔNG cố định ở đáy bảng: số khách và cộng Điểm hiện tại, Doanh số tích luỹ, Số lần dùng, Số lần dùng trong tháng, tính trên toàn bộ kết quả. Các cột còn lại không cộng.',
+  'Danh sách xếp theo SĐT giảm dần. Lưới hiển thị tối đa 20.000 khách; số khách và dòng TỔNG vẫn tính đủ toàn bộ.',
+  'Download CSV gồm các dòng đang hiển thị và dòng TỔNG ở cuối file.',
+  'Giới hạn 6 lượt tìm mỗi phút. Thao tác quá nhanh sẽ bị tạm chặn vài phút.',
+  'SĐT, email và tên khách là dữ liệu cá nhân: chỉ dùng cho công việc nội bộ, không chia sẻ ra ngoài.'
+];
+for (const t of RULES) { const li = document.createElement('li'); li.textContent = t; $('rulesList').appendChild(li); }
+$('infoBtn').onclick = () => $('rules').showModal();
+$('rules').addEventListener('click', e => { if (e.target === e.currentTarget) e.currentTarget.close(); });   // bấm ra ngoài để đóng
+
+let rows = [], totalsAll = {}, totalCount = 0, lastTruncated = false;
+
+const LABELS = {
+  ma_kh_so: 'Mã KH', ten_kh: 'Tên KH', sdt: 'SĐT', email: 'Email', ngay_tao: 'Ngày tạo', so_the: 'Số thẻ', loai_the: 'Loại thẻ',
+  cap_the: 'Cấp thẻ', the_hoat_dong: 'Thẻ đang hoạt động', diem_hien_tai: 'Điểm hiện tại', doanh_so_tich_luy: 'Doanh số tích luỹ',
+  so_lan_dung: 'Số lần dùng', so_lan_dung_thang: 'Số lần dùng trong tháng', nh_dung_the: 'NH dùng thẻ'
+};
+const label = c => LABELS[c] || c;
+const TEXT_COLS = /^(sdt|ma_kh_so|so_the)$/;               // giữ nguyên số 0 đầu, không định dạng số
+const SUM_COLS = ['diem_hien_tai', 'doanh_so_tich_luy', 'so_lan_dung', 'so_lan_dung_thang'];
+const fmtVal = (k, v) => {
+  if (v === null || v === undefined) return '';
+  if (k === 'the_hoat_dong') return v ? 'Có' : 'Không';
+  if (k === 'ngay_tao') return String(v).replace('T', ' ').slice(0, 19);
+  return v;
+};
+const fmtNum = v => (typeof v === 'number') ? v.toLocaleString('vi-VN', { maximumFractionDigits: 3 }) : v;
+const fmtInt = n => n.toLocaleString('vi-VN');
+const setMsg = (t, warn) => { $('msg').textContent = t; $('msg').className = warn ? 'warn' : ''; };
+
+// Chọn tháng: từ (tháng hiện tại − (MAX_MONTHS − 1)) đến tháng hiện tại
+const ym = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+const nowD = new Date();
+$('month').max = ym(nowD);
+$('month').min = ym(new Date(nowD.getFullYear(), nowD.getMonth() - (MAX_MONTHS - 1), 1));
+$('month').value = ym(nowD);
+
+fetch(API + '/api/kh-filters')
+  .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+  .then(d => {
+    $('rest').replaceChildren(new Option('Tất cả', 'ALL'), ...d.branches.map(x => new Option(x.ten_nha_hang, String(x.ma_nh))));
+    $('card').replaceChildren(new Option('Tất cả', 'ALL'), ...d.cardTypes.map(x => new Option(x, x)));
+  })
+  .catch(() => setMsg('Không tải được danh sách chi nhánh và loại thẻ', true));
+
+$('btn').onclick = async () => {
+  const month = $('month').value;
+  if (!/^\d{4}-\d{2}$/.test(month)) return setMsg('Hãy chọn tháng', true);
+  if (month > $('month').max || month < $('month').min) {
+    return setMsg(`Chỉ được tìm từ ${$('month').min} đến ${$('month').max} (tối đa ${MAX_MONTHS} tháng từ tháng hiện tại)`, true);
+  }
+
+  setMsg('Đang tìm...');
+  $('btn').disabled = true; $('dl').disabled = true;
+  let data;
+  try {
+    const q = `month=${month}&org=${encodeURIComponent($('rest').value)}&card=${encodeURIComponent($('card').value)}&used=${$('used').value}`;
+    const r = await fetch(`${API}/api/new-customers?${q}`);
+    if (r.status === 429) throw new Error('Bạn thao tác quá nhanh, thử lại sau ít phút');
+    if (r.status === 400) throw new Error((await r.json()).error || 'Tham số không hợp lệ');
+    if (!r.ok) throw new Error('Lỗi khi truy vấn, thử lại sau');
+    data = await r.json();
+  } catch (e) {
+    setMsg(e.message, true); $('btn').disabled = false; return;
+  }
+  $('btn').disabled = false;
+
+  rows = data.rows; totalsAll = data.totals; totalCount = data.total; lastTruncated = !!data.truncated;
+  const tbl = $('tbl'); tbl.replaceChildren();
+  $('wrap').hidden = !rows.length;
+  if (!rows.length) return setMsg('Không có dữ liệu');
+  const cols = Object.keys(rows[0]);
+
+  const thead = tbl.createTHead().insertRow();
+  cols.forEach(c => { const th = document.createElement('th'); th.textContent = label(c); if (SUM_COLS.includes(c) || c === 'cap_the') th.className = 'num'; thead.appendChild(th); });
+
+  const tbody = tbl.createTBody();
+  rows.forEach(row => {
+    const tr = tbody.insertRow();
+    cols.forEach(c => {
+      const td = tr.insertCell();
+      const v = fmtVal(c, row[c]);
+      td.textContent = TEXT_COLS.test(c) ? v : fmtNum(v);       // textContent: chống XSS
+      if (typeof row[c] === 'number') td.className = 'num';
+    });
+  });
+
+  // Dòng tổng cố định (tfoot sticky) — số liệu do API tính trên TOÀN BỘ kết quả
+  const foot = tbl.createTFoot().insertRow();
+  cols.forEach((c, i) => {
+    const td = foot.insertCell();
+    if (i === 0) td.textContent = `TỔNG (${fmtInt(totalCount)} KH)`;
+    else if (SUM_COLS.includes(c)) { td.textContent = fmtNum(totalsAll[c]); td.className = 'num'; }
+  });
+
+  const head = `Tháng ${month.slice(5)}/${month.slice(0, 4)}: ${fmtInt(totalCount)} KH, trong đó ${fmtInt(data.coThe)} có thẻ, ${fmtInt(data.dungThe)} dùng thẻ trong tháng`;
+  const note = $('rest').value !== 'ALL' ? '. Đã lọc KH có dùng thẻ tại chi nhánh đã chọn' : '';
+  if (lastTruncated) {
+    setMsg(`${head}${note}. Chỉ hiển thị ${fmtInt(data.limit)} KH đầu; dòng TỔNG vẫn tính trên toàn bộ.`, true);
+  } else {
+    setMsg(head + note);
+  }
+  $('dl').disabled = false;
+};
+
+$('dl').onclick = () => {
+  const cols = Object.keys(rows[0]);
+  const esc = v => {
+    let s = String(v ?? '');
+    if (typeof v === 'string' && /^[=+\-@]/.test(s)) s = "'" + s;   // chống CSV injection (không đụng tới số âm)
+    return `"${s.replace(/"/g, '""')}"`;
+  };
+  // SĐT, mã KH, số thẻ bọc thành ="..." để Excel không làm mất số 0 đầu
+  const cell = (c, v) => TEXT_COLS.test(c) ? `="${String(v ?? '').replace(/"/g, '')}"` : esc(fmtVal(c, v));
+  const totalRow = cols.map((c, i) => {
+    if (i === 0) return esc(`TỔNG (${totalCount} KH${lastTruncated ? `; file chỉ có ${rows.length} dòng đầu` : ''})`);
+    return esc(SUM_COLS.includes(c) ? totalsAll[c] : '');
+  });
+  const csv = [cols.map(c => esc(label(c))).join(','),
+               ...rows.map(r => cols.map(c => cell(c, r[c])).join(',')),
+               totalRow.join(',')].join('\r\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }));  // BOM để Excel đọc đúng tiếng Việt
+  a.download = `kh_phat_sinh_${$('month').value}.csv`;       // không đưa SĐT/tên vào tên file
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+};
+</script>
+</body>
+</html>
