@@ -8,49 +8,40 @@
   :root { --bg:#f7f8fa; --card:#fff; --line:#e3e6eb; --fg:#1b1f29; --muted:#6a7285; --accent:#2f5bea; }
   * { box-sizing: border-box; }
   body { margin:0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background:var(--bg); color:var(--fg); }
-  main { max-width:1100px; margin:0 auto; padding:40px 20px 56px; }
+  main { max-width:1280px; margin:0 auto; padding:40px 20px 56px; }
   h1 { font-size:24px; margin:0 0 6px; }
   .sub { color:var(--muted); font-size:14px; margin:0 0 28px; }
-  .grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(260px, 1fr)); gap:16px; }
-  .btn { display:flex; flex-direction:column; gap:6px; padding:20px; min-height:112px; background:var(--card);
-         border:1px solid var(--line); border-radius:12px; color:inherit; text-decoration:none;
+  /* 10 nút chia đều: 5 cột x 2 hàng; màn hình hẹp thì giảm số cột */
+  .grid { display:grid; grid-template-columns:repeat(5, 1fr); gap:16px; }
+  @media (max-width: 1000px) { .grid { grid-template-columns:repeat(3, 1fr); } }
+  @media (max-width: 640px)  { .grid { grid-template-columns:repeat(2, 1fr); } }
+  .btn { display:flex; flex-direction:column; justify-content:center; align-items:center; gap:8px; padding:20px 12px; min-height:128px;
+         background:var(--card); border:1px solid var(--line); border-radius:12px; color:inherit; text-decoration:none; text-align:center;
          transition:border-color .15s, box-shadow .15s, transform .15s; }
-  a.btn:hover, a.btn:focus-visible { border-color:var(--accent); box-shadow:0 4px 16px rgba(47,91,234,.14); transform:translateY(-1px); outline:none; }
-  .btn .name { font-size:16px; font-weight:600; }
-  .btn .desc { font-size:13px; color:var(--muted); line-height:1.4; }
-  .btn .tag { margin-top:auto; font-size:12px; color:var(--accent); font-weight:600; }
-  .btn.off { background:#f1f3f7; cursor:not-allowed; }
-  .btn.off .name { color:var(--muted); }
-  .btn.off .tag { color:var(--muted); font-weight:500; }
+  .btn:hover, .btn:focus-visible { border-color:var(--accent); box-shadow:0 4px 16px rgba(47,91,234,.14); transform:translateY(-1px); outline:none; }
+  .btn .name { font-size:18px; font-weight:600; }
+  .btn .count { font-size:12px; color:var(--accent); font-weight:600; }
+  .btn.empty .count { color:var(--muted); font-weight:500; }
 </style>
 </head>
 <body>
 <main>
   <h1>Báo cáo SOL</h1>
-  <p class="sub">Chọn một báo cáo để xem chi tiết.</p>
+  <p class="sub">Chọn phòng ban để xem các báo cáo.</p>
   <div class="grid" id="grid"></div>
 </main>
 
+<script src="depts.js"></script>
 <script>
-// ===== Danh sách chức năng — thêm một báo cáo mới = thêm một dòng vào mảng này =====
-// href: tên file trang con (cùng thư mục). Bỏ href (hoặc để null) thì nút hiện "Sắp có" và không bấm được.
-const PAGES = [
-  { name: 'Doanh thu theo NH', desc: 'Danh sách bill theo khoảng ngày và chi nhánh, có dòng tổng và tải CSV.', href: 'doanh-thu-nh.html' },
-  { name: 'Doanh thu chi tiết theo SDT', desc: 'Tra cứu bill và doanh thu của một số điện thoại khách trong khoảng ngày.', href: 'doanh-thu-sdt.html' },
-  { name: 'Tổng doanh thu 6 tháng gom theo SDT', desc: 'Mỗi SDT một dòng: số bill, tổng doanh thu, bill cuối. Tìm theo SDT hoặc tên khách gần đúng.', href: 'doanh-thu-6-thang-theo-sdt.html' },
-  { name: 'Giảm giá & khuyến mãi', desc: 'Tổng giảm giá theo lý do và theo chi nhánh.',          href: null },
-  { name: 'Thanh toán theo hình thức', desc: 'Tiền mặt, thẻ, ví điện tử theo ngày.',             href: null }
-];
-
 const grid = document.getElementById('grid');
-for (const p of PAGES) {
-  const el = document.createElement(p.href ? 'a' : 'div');
-  el.className = 'btn' + (p.href ? '' : ' off');
-  if (p.href) el.href = p.href;
-  for (const [cls, txt] of [['name', p.name], ['desc', p.desc], ['tag', p.href ? 'Mở báo cáo →' : 'Sắp có']]) {
-    const s = document.createElement('span'); s.className = cls; s.textContent = txt; el.appendChild(s);
+for (const d of DEPTS) {
+  const a = document.createElement('a');
+  a.className = 'btn' + (d.pages.length ? '' : ' empty');
+  a.href = 'phong-ban.html?d=' + encodeURIComponent(d.id);
+  for (const [cls, txt] of [['name', d.name], ['count', d.pages.length ? d.pages.length + ' báo cáo' : 'Chưa có báo cáo']]) {
+    const s = document.createElement('span'); s.className = cls; s.textContent = txt; a.appendChild(s);
   }
-  grid.appendChild(el);
+  grid.appendChild(a);
 }
 </script>
 </body>
