@@ -36,6 +36,7 @@
 </main>
 
 <script src="depts.js"></script>
+<script src="auth.js"></script>
 <script>
 const id = new URLSearchParams(location.search).get('d');
 const dept = DEPTS.find(d => d.id === id);
@@ -58,6 +59,7 @@ if (!dept) {
     el.className = 'btn' + (p.href ? '' : ' off');
     if (p.href) el.href = p.href;
     for (const [cls, txt] of [['name', p.name], ['desc', p.desc], ['tag', p.href ? 'Mở báo cáo →' : 'Sắp có']]) {
+      if (!txt) continue;
       const s = document.createElement('span'); s.className = cls; s.textContent = txt; el.appendChild(s);
     }
     grid.appendChild(el);

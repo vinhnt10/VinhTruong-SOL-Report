@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Trang báo cáo support cho nhà SOL của Vinh Trương 2027</title>
+<title>Vinh Trương support bà con các phòng ban SOL hết mình</title>
 <style>
   :root { --bg:#f7f8fa; --card:#fff; --line:#e3e6eb; --fg:#1b1f29; --muted:#6a7285; --accent:#2f5bea; }
   * { box-sizing: border-box; }
@@ -32,16 +32,27 @@
 </main>
 
 <script src="depts.js"></script>
+<script src="auth.js"></script>
 <script>
 const grid = document.getElementById('grid');
 for (const d of DEPTS) {
   const a = document.createElement('a');
-  a.className = 'btn' + (d.pages.length ? '' : ' empty');
-  a.href = 'phong-ban.html?d=' + encodeURIComponent(d.id);
-  for (const [cls, txt] of [['name', d.name], ['count', d.pages.length ? d.pages.length + ' báo cáo' : 'Chưa có báo cáo']]) {
+  const n = d.pages.filter(p => p.href).length;     // chỉ đếm báo cáo đã mở được
+  a.className = 'btn' + (n ? '' : ' empty');
+  const url = d.href || 'phong-ban.html?d=' + encodeURIComponent(d.id);
+  a.href = url;
+  a.addEventListener('click', e => { e.preventDefault(); SOLAuth.enter(d.id, url); });   // kiểm tra mã user trước khi vào
+  for (const [cls, txt] of [['name', d.name], ['count', n ? n + ' báo cáo' : 'Chưa có báo cáo']]) {
     const s = document.createElement('span'); s.className = cls; s.textContent = txt; a.appendChild(s);
   }
   grid.appendChild(a);
+}
+// Bị chặn khi vào thẳng URL: hỏi mã luôn
+const need = new URLSearchParams(location.search).get('need');
+if (need && DEPTS.some(d => d.id === need)) {
+  const d = DEPTS.find(x => x.id === need);
+  history.replaceState(null, '', 'index.html');
+  SOLAuth.enter(need, d.href || 'phong-ban.html?d=' + encodeURIComponent(need));
 }
 </script>
 </body>

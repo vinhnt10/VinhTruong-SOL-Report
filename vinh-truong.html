@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Vinh Trương | Quản trị</title>
+<style>
+  :root { --bg:#f7f8fa; --card:#fff; --line:#e3e6eb; --fg:#1b1f29; --muted:#6a7285; --accent:#2f5bea; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:system-ui,-apple-system,"Segoe UI",sans-serif; background:var(--bg); color:var(--fg); }
+  main { max-width:1100px; margin:0 auto; padding:24px 20px 56px; }
+  .top { display:flex; align-items:baseline; gap:16px; flex-wrap:wrap; }
+  .back { font-size:13px; color:var(--accent); text-decoration:none; }
+  h1 { font-size:22px; margin:0; }
+  .me { margin-left:auto; font-size:13px; color:var(--muted); }
+  .tabs { display:flex; gap:4px; border-bottom:1px solid var(--line); margin:18px 0 16px; flex-wrap:wrap; }
+  .tab { font:inherit; font-size:14px; padding:9px 16px; border:1px solid transparent; border-bottom:0; border-radius:8px 8px 0 0; background:none; color:var(--muted); cursor:pointer; margin-bottom:-1px; }
+  .tab[aria-selected="true"] { background:var(--card); border-color:var(--line); color:var(--accent); font-weight:600; }
+  .panel { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px; }
+  .panel[hidden] { display:none; }
+  .tools { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:12px; }
+  input, select, button.b { font:inherit; padding:7px 11px; border:1px solid var(--line); border-radius:8px; background:#fff; color:var(--fg); }
+  button.b { cursor:pointer; }
+  .note { font-size:12.5px; color:var(--muted); line-height:1.5; margin:0 0 12px; }
+  .wrap { overflow:auto; max-height:65vh; }
+  table { border-collapse:separate; border-spacing:0; width:100%; }
+  th, td { padding:8px 12px; font-size:13px; border-bottom:1px solid var(--line); text-align:left; white-space:nowrap; }
+  th { position:sticky; top:0; background:#f1f3f7; }
+  .chip { display:inline-block; background:#eef2ff; color:#3730a3; border-radius:999px; padding:1px 9px; font-size:12px; margin:1px 4px 1px 0; }
+  .chip.all { background:#dcfce7; color:#166534; }
+  .empty { color:var(--muted); font-size:14px; padding:24px; text-align:center; }
+</style>
+</head>
+<body>
+<main>
+  <div class="top"><a class="back" href="index.html">&larr; Trang chủ</a><h1>Vinh Trương</h1><span class="me" id="me"></span></div>
+
+  <div class="tabs" role="tablist">
+    <button class="tab" role="tab" data-t="0">Danh sách người dùng</button>
+    <button class="tab" role="tab" data-t="1">Log</button>
+    <button class="tab" role="tab" data-t="2">Tab 3</button>
+    <button class="tab" role="tab" data-t="3">Tab 4</button>
+    <button class="tab" role="tab" data-t="4">Tab 5</button>
+  </div>
+
+  <section class="panel" data-p="0">
+    <p class="note">Mã user được phép thao tác và phòng ban được vào. Muốn thêm hoặc đổi quyền: sửa mảng <b>USERS</b> trong file <b>auth.js</b>.</p>
+    <div class="wrap"><table><thead><tr><th>#</th><th>Mã user</th><th>Tên</th><th>Được vào</th></tr></thead><tbody id="users"></tbody></table></div>
+  </section>
+
+  <section class="panel" data-p="1" hidden>
+    <p class="note">Ghi lại thao tác trên trang web: đăng nhập, vào phòng ban, mở báo cáo, bấm Download. Hiện log lưu ngay trên trình duyệt này (tối đa 1000 dòng gần nhất); ghi tập trung lên server sẽ làm ở bước sau.</p>
+    <div class="tools">
+      <input id="q" placeholder="Lọc theo mã user, thao tác, nơi..." size="30">
+      <select id="act"><option value="">Mọi thao tác</option></select>
+      <button class="b" id="reload">Tải lại</button>
+      <button class="b" id="csv">Download CSV</button>
+      <button class="b" id="clear">Xoá log</button>
+      <span class="note" id="cnt" style="margin:0 0 0 auto"></span>
+    </div>
+    <div class="wrap"><table><thead><tr><th>Thời gian</th><th>Mã user</th><th>Thao tác</th><th>Nơi thao tác</th></tr></thead><tbody id="logs"></tbody></table></div>
+  </section>
+
+  <section class="panel" data-p="2" hidden><p class="empty">Tab 3: chưa có nội dung.</p></section>
+  <section class="panel" data-p="3" hidden><p class="empty">Tab 4: chưa có nội dung.</p></section>
+  <section class="panel" data-p="4" hidden><p class="empty">Tab 5: chưa có nội dung.</p></section>
+</main>
+
+<script src="depts.js"></script>
+<script src="auth.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const cell = (tr, text) => { tr.insertCell().textContent = text; return tr.cells[tr.cells.length - 1]; };
+const fmt = iso => new Date(iso).toLocaleString('vi-VN', { hour12: false });
+
+const u = SOLAuth.current();
+if (u) {
+  $('me').textContent = 'Đang đăng nhập: ' + u.code + (u.name ? ' (' + u.name + ')' : '') + ' · ';
+  const out = document.createElement('a'); out.href = 'index.html'; out.textContent = 'Đăng xuất'; out.className = 'back';
+  out.onclick = () => SOLAuth.logout(); $('me').appendChild(out);
+}
+
+// ---- Tab: danh sách người dùng ----
+SOLAuth.USERS.forEach((x, i) => {
+  const tr = $('users').insertRow();
+  cell(tr, i + 1); cell(tr, x.code); cell(tr, x.name || '');
+  const td = tr.insertCell();
+  (x.depts.includes('*') ? ['*'] : x.depts).forEach(d => {
+    const s = document.createElement('span'); s.className = 'chip' + (d === '*' ? ' all' : '');
+    s.textContent = d === '*' ? 'Tất cả' : SOLAuth.deptName(d); td.appendChild(s);
+  });
+});
+
+// ---- Tab: log ----
+let shown = [];
+function renderLog() {
+  const all = SOLAuth.readLog().reverse();           // mới nhất trên cùng
+  const acts = [...new Set(all.map(r => r.action))].sort();
+  const cur = $('act').value;
+  $('act').replaceChildren(new Option('Mọi thao tác', ''), ...acts.map(a => new Option(a, a)));
+  $('act').value = acts.includes(cur) ? cur : '';
+  const q = $('q').value.trim().toLowerCase(), a = $('act').value;
+  shown = all.filter(r => (!a || r.action === a) && (!q || (r.user + ' ' + r.action + ' ' + r.target).toLowerCase().includes(q)));
+  $('logs').replaceChildren();
+  shown.forEach(r => { const tr = $('logs').insertRow(); cell(tr, fmt(r.t)); cell(tr, r.user); cell(tr, r.action); cell(tr, r.target); });
+  $('cnt').textContent = shown.length + ' / ' + all.length + ' dòng';
+  if (!shown.length) { const tr = $('logs').insertRow(); const td = tr.insertCell(); td.colSpan = 4; td.className = 'empty'; td.textContent = 'Chưa có log'; }
+}
+$('q').oninput = renderLog; $('act').onchange = renderLog; $('reload').onclick = renderLog;
+$('clear').onclick = () => { if (confirm('Xoá toàn bộ log trên trình duyệt này?')) { SOLAuth.clearLog(); renderLog(); } };
+$('csv').onclick = () => {
+  if (!shown.length) return;
+  const esc = v => { let s = String(v ?? ''); if (/^[=+\-@]/.test(s)) s = "'" + s; return '"' + s.replace(/"/g, '""') + '"'; };
+  const csv = [['Thời gian', 'Mã user', 'Thao tác', 'Nơi thao tác'].map(esc).join(','),
+    ...shown.map(r => [fmt(r.t), r.user, r.action, r.target].map(esc).join(','))].join('\r\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }));
+  a.download = 'log_thao_tac.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  SOLAuth.log('Download', 'Vinh Trương / Log');
+};
+
+// ---- Chuyển tab ----
+function showTab(i) {
+  document.querySelectorAll('.tab').forEach(t => t.setAttribute('aria-selected', String(t.dataset.t === String(i))));
+  document.querySelectorAll('.panel').forEach(p => p.hidden = p.dataset.p !== String(i));
+  if (i === 1) renderLog();
+}
+document.querySelectorAll('.tab').forEach(t => t.onclick = () => showTab(Number(t.dataset.t)));
+showTab(0);
+</script>
+</body>
+</html>

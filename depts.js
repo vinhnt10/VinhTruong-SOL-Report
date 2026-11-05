@@ -1,9 +1,17 @@
 // ===== Danh sách phòng ban và báo cáo thuộc từng phòng ban (dùng chung cho index.html và phong-ban.html) =====
 // Thêm báo cáo mới vào phòng ban = thêm một dòng vào mảng pages của phòng ban đó.
 //   href: tên file trang con (cùng thư mục). Để null thì nút hiện "Sắp có" và không bấm được.
+//   href ở cấp phòng ban (tuỳ chọn): bấm nút phòng ban sẽ mở thẳng trang đó thay vì danh sách báo cáo.
 // Đổi tên phòng ban 6 đến 9: sửa trường name bên dưới (giữ nguyên id).
 const DEPTS = [
-  { id: 'van-hanh', name: 'Vận hành', pages: [] },
+  { id: 'van-hanh', name: 'Vận hành', pages: [
+    { name: 'Dự đoán SL đặt hàng CK theo từng NH', desc: 'Chọn brand và nhà hàng để xem mốc thời gian đặt hàng CK và dự đoán số lượng đặt hàng.', href: 'du-doan-dat-hang-ck.html' },
+    { name: '2', desc: '', href: null },
+    { name: '3', desc: '', href: null },
+    { name: '4', desc: '', href: null },
+    { name: '5', desc: '', href: null },
+    { name: '6', desc: '', href: null }
+  ] },
   { id: 'mkt', name: 'MKT', pages: [
     { name: 'Doanh thu chi tiết theo NH', desc: 'Danh sách bill theo khoảng ngày và chi nhánh, có dòng tổng và tải CSV.', href: 'doanh-thu-nh.html' },
     { name: 'Doanh thu chi tiết theo SDT', desc: 'Tra cứu bill và doanh thu của một số điện thoại khách trong khoảng ngày.', href: 'doanh-thu-sdt.html' },
@@ -19,5 +27,5 @@ const DEPTS = [
   { id: 'pb7', name: 'Phòng ban 7', pages: [] },
   { id: 'pb8', name: 'Phòng ban 8', pages: [] },
   { id: 'pb9', name: 'Phòng ban 9', pages: [] },
-  { id: 'vinh-truong', name: 'Vinh Trương', pages: [] }
+  { id: 'vinh-truong', name: 'Vinh Trương', href: 'vinh-truong.html', pages: [] }
 ];

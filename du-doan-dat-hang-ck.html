@@ -1,0 +1,407 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dự đoán SL đặt hàng CK theo từng NH</title>
+<style>
+  :root { --bg:#f7f8fa; --card:#fff; --line:#e3e6eb; --fg:#1b1f29; --muted:#6a7285; --accent:#2f5bea; --ok:#16a34a; --warn:#b45309; --err:#dc2626; }
+  * { box-sizing: border-box; }
+  html, body { height:100%; }
+  body { margin:0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background:var(--bg); color:var(--fg); }
+  main { height:100vh; display:flex; flex-direction:column; padding:16px 20px; gap:12px; }
+  .top { display:flex; align-items:baseline; gap:16px; }
+  h1 { font-size:20px; margin:0; }
+  .back { font-size:13px; color:var(--accent); text-decoration:none; white-space:nowrap; }
+  .back:hover { text-decoration:underline; }
+  .info { align-self:center; width:26px; height:26px; padding:0; border-radius:50%; border:1.5px solid var(--accent); color:var(--accent);
+          background:#fff; font:italic 700 15px/1 Georgia, serif; }
+  .info:hover, .info:focus-visible { background:var(--accent); color:#fff; outline:none; }
+  dialog.rules { border:1px solid var(--line); border-radius:12px; width:min(660px, calc(100% - 32px)); max-height:85vh; padding:20px 24px; color:var(--fg); }
+  dialog.rules::backdrop { background:rgba(15,20,35,.4); }
+  dialog.rules h2 { font-size:17px; margin:0 0 10px; }
+  dialog.rules ul { margin:0 0 16px; padding-left:20px; font-size:14px; line-height:1.5; }
+  dialog.rules li { margin:6px 0; }
+  dialog.rules .close { float:right; }
+
+  .bar { display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px; }
+  label { display:flex; flex-direction:column; gap:4px; font-size:12px; color:var(--muted); }
+  input, select, button { font:inherit; padding:8px 12px; border:1px solid var(--line); border-radius:8px; background:#fff; color:var(--fg); }
+  select { min-width:220px; }
+  select:disabled { background:#f1f3f7; color:var(--muted); cursor:not-allowed; }
+  button { cursor:pointer; }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  button:disabled { opacity:.5; cursor:not-allowed; }
+  #hint { font-size:12px; color:var(--muted); align-self:center; }
+
+  /* ===== Timeline 5 node ===== */
+  .timeline { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:18px 28px 14px; }
+  .track { position:relative; display:flex; justify-content:space-between; }
+  .track::before { content:""; position:absolute; left:calc(10% ); right:calc(10%); top:15px; height:4px; background:var(--line); border-radius:2px; }
+  .fill { position:absolute; left:10%; top:15px; height:4px; width:0; background:var(--accent); border-radius:2px; transition:width .55s ease; }
+  .fill.loading { background:linear-gradient(90deg, var(--accent) 0%, #7d9bff 50%, var(--accent) 100%); background-size:200% 100%; animation:flow 1s linear infinite; }
+  @keyframes flow { to { background-position:-200% 0; } }
+  .node { position:relative; z-index:1; width:20%; display:flex; flex-direction:column; align-items:center; gap:8px; text-align:center; }
+  .dot { width:34px; height:34px; border-radius:50%; background:#fff; border:3px solid var(--line); display:grid; place-items:center; font-size:13px; font-weight:700; color:var(--muted); transition:all .3s; }
+  .node .lbl { font-size:12.5px; color:var(--muted); line-height:1.3; max-width:150px; }
+  .node.active .dot { border-color:var(--accent); color:var(--accent); box-shadow:0 0 0 0 rgba(47,91,234,.5); animation:pulse 1.1s ease-out infinite; }
+  .node.active .lbl { color:var(--accent); font-weight:600; }
+  @keyframes pulse { 0% { box-shadow:0 0 0 0 rgba(47,91,234,.45); } 100% { box-shadow:0 0 0 12px rgba(47,91,234,0); } }
+  .node.done .dot { background:var(--accent); border-color:var(--accent); color:#fff; }
+  .node.done .lbl { color:var(--fg); }
+  .node.warn .dot { background:#fef3c7; border-color:var(--warn); color:var(--warn); }
+  .node.warn .lbl { color:var(--warn); font-weight:600; }
+  .node.error .dot { background:#fee2e2; border-color:var(--err); color:var(--err); }
+  .node.error .lbl { color:var(--err); font-weight:600; }
+  @media (max-width: 700px) { .timeline { padding:14px 8px; } .node .lbl { font-size:11px; } .dot { width:28px; height:28px; } .track::before, .fill { top:12px; } }
+
+  #msg { font-size:13px; color:var(--muted); min-height:18px; margin:-2px 2px; }
+  #msg.warn { color:var(--warn); }
+
+  /* ===== Mốc thời gian đặt hàng ===== */
+  #sched { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:0; }
+  #sched summary { cursor:pointer; padding:10px 14px; font-size:14px; font-weight:600; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  #sched .clickhint { font-weight:400; font-size:12.5px; color:var(--accent); }
+  #sched summary .today { margin:0 0 0 auto; }
+  #sched summary .today.no { background:#f1f3f7; color:var(--muted); }
+  #sched .body { padding:0 14px 12px; max-height:30vh; overflow:auto; }
+  #sched .rule { font-size:13px; line-height:1.5; margin:0 0 6px; }
+  #sched .today { display:inline-block; background:#dcfce7; color:#166534; border-radius:999px; padding:2px 10px; font-size:12px; font-weight:600; margin-bottom:8px; }
+  #sched table { border-collapse:collapse; width:100%; margin:6px 0 10px; }
+  #sched th, #sched td { border:1px solid var(--line); padding:6px 10px; font-size:13px; text-align:left; }
+  #sched th { background:#f1f3f7; }
+  #sched tr.hit td { background:#f0fdf4; }
+  #sched .cat { font-size:13px; font-weight:600; margin:10px 0 2px; }
+  #sched .note { font-size:12.5px; color:var(--muted); line-height:1.5; margin:2px 0; }
+
+  .wrap { flex:1; min-height:160px; overflow:auto; background:var(--card); border:1px solid var(--line); border-radius:10px; }
+  .wrap.empty { display:grid; place-items:center; color:var(--muted); font-size:14px; padding:20px; text-align:center; }
+  table.grid { border-collapse:separate; border-spacing:0; width:100%; }
+  table.grid th, table.grid td { padding:8px 12px; font-size:13px; border-bottom:1px solid var(--line); text-align:left; white-space:nowrap; }
+  table.grid th { position:sticky; top:0; background:#f1f3f7; z-index:2; }
+  table.grid td.num { text-align:right; font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+<main>
+  <div class="top"><a class="back" href="phong-ban.html?d=van-hanh">&larr; Vận hành</a><h1>Dự đoán SL đặt hàng CK theo từng NH</h1>
+    <button type="button" class="info" id="infoBtn" aria-label="Xem quy tắc của báo cáo này" title="Quy tắc">i</button></div>
+
+  <div class="bar">
+    <label>Brand<select id="brand"><option value="">-- Chọn brand --</option></select></label>
+    <label>Nhà hàng<select id="branch" disabled><option value="">-- Chọn brand trước --</option></select></label>
+    <button id="btn" class="primary" disabled>Tìm</button>
+    <button id="dl" disabled>Download CSV</button>
+    <span id="hint">Hãy chọn đủ Brand và Nhà hàng để bấm Tìm</span>
+  </div>
+
+  <div class="timeline" aria-label="Tiến trình tính dự đoán">
+    <div class="track">
+      <div class="fill" id="fill"></div>
+      <div class="node" data-i="0"><div class="dot">1</div><div class="lbl">Chi tiết BH tháng trước</div></div>
+      <div class="node" data-i="1"><div class="dot">2</div><div class="lbl">Danh sách mã NVL dùng order CK</div></div>
+      <div class="node" data-i="2"><div class="dot">3</div><div class="lbl">Danh sách BOM</div></div>
+      <div class="node" data-i="3"><div class="dot">4</div><div class="lbl">Chi tiết kiểm kê ngày hôm trước</div></div>
+      <div class="node" data-i="4"><div class="dot">5</div><div class="lbl">Dự đoán đặt hàng</div></div>
+    </div>
+  </div>
+  <div id="msg"></div>
+
+  <details id="sched" hidden>
+    <summary><span id="schedTitle">Mốc thời gian đặt hàng</span><em class="clickhint">Bấm để xem</em><span id="todayBadge" class="today"></span></summary>
+    <div class="body" id="schedBody"></div>
+  </details>
+
+  <div class="wrap empty" id="wrap">Chọn Brand và Nhà hàng, rồi bấm Tìm để xem dự đoán số lượng đặt hàng.</div>
+</main>
+
+<dialog class="rules" id="rules">
+  <h2>Quy tắc: Dự đoán SL đặt hàng CK theo từng NH</h2>
+  <ul id="rulesList"></ul>
+  <form method="dialog"><button class="close primary">Đóng</button></form>
+</dialog>
+
+<script src="depts.js"></script>
+<script src="auth.js"></script>
+<script>
+// >>> Đổi thành domain API của bạn (không có dấu / ở cuối)
+const API = 'https://report-api.orderpermillion.trade';
+const $ = id => document.getElementById(id);
+
+/* =====================================================================
+   LỊCH ĐẶT HÀNG CK — hardcode từ file "THÔNG TIN LỊCH ĐẶT HÀNG SOL", sheet "Đặt hàng CK"
+   (áp dụng cho đơn hàng giao từ 22/06/2026). Khi lịch đổi: sửa ROUTES / GROUPS / BRANDS bên dưới.
+   ===================================================================== */
+const SCHEDULE_VALID_FROM = '22/06/2026';
+
+// Các tuyến hàng: mỗi dòng = (ngày order, ngày giao, ngày sử dụng). Thứ viết tắt như trong file Excel.
+const ROUTES = {
+  matkho: { cat: 'Hàng mát - hàng khô', rows: [
+    { order: 'T7', deliver: 'T3', use: 'T4, T5' },
+    { order: 'T3', deliver: 'T5', use: 'T6, T7' },
+    { order: 'T5', deliver: 'T7', use: 'CN, T2, T3' } ] },
+  matkhodong: { cat: 'Hàng mát - hàng khô - hàng đông', rows: [
+    { order: 'T6', deliver: 'T2', use: 'T3, T4' },
+    { order: 'T2', deliver: 'T4', use: 'T5, T6' },
+    { order: 'T4', deliver: 'T6', use: 'CN, T2, T3' } ] },
+  danang: { cat: 'Hàng mát - hàng khô - hàng đông (khu vực Đà Nẵng)', rows: [
+    { order: 'T6', deliver: 'T3', use: 'T5' },
+    { order: 'T2', deliver: 'T5', use: 'T7' },
+    { order: 'T4', deliver: 'T7', use: 'T2 tuần kế tiếp' } ] },
+  hanoi: { cat: 'Hàng mát - hàng khô - hàng đông (khu vực Hà Nội)', rows: [
+    { order: 'T6', deliver: 'T7 tuần kế tiếp', use: 'CN, T2, T3, T4, T5' },
+    { order: 'T3', deliver: 'T4 tuần kế tiếp', use: 'T5, T6, T7, CN, T2' } ] },
+  taruA: { cat: 'Sốt taru taru', rows: [
+    { order: 'T7', deliver: 'T3', use: 'T4, T5, T6, T7' },
+    { order: 'T4', deliver: 'T6', use: 'T7, CN, T2, T3' } ] },
+  taruB: { cat: 'Sốt taru taru', rows: [
+    { order: 'T7', deliver: 'T4', use: 'T5, T6, T7' },
+    { order: 'T4', deliver: 'T7', use: 'CN, T2, T3, T4' } ] },
+  ccdcT2: { cat: 'Hàng CCDC/VDTH', rows: [
+    { order: 'T2', deliver: 'T4', use: '2 tuần', note: 'Chỉ order tuần thứ 1 và tuần thứ 3 của tháng' } ] },
+  ccdcT3: { cat: 'Hàng CCDC/VDTH', rows: [
+    { order: 'T3', deliver: 'T5', use: '2 tuần', note: 'Chỉ order tuần thứ 1 và tuần thứ 3 của tháng' } ] }
+};
+
+// Các nhóm nhà hàng dùng chung một tuyến (tên nhà hàng đúng như trong file Excel)
+const GROUPS = {
+  matkho: ['KRU5-NTP', 'KRU1-VCDK', 'KRU4-CMAL', 'KRU11-LOTTE', 'KRU10-PXL2', 'KRU13-VP6', 'KRU3-BCAT',
+           'KSY3-LOTTE', 'KSY1-LM81', 'KSS1-VHM', 'KSS5-PMAL', 'KSS6-CMAL',
+           'MCD3-HBT', 'MCD2-LM81', 'MCD4-ETL', 'MCD6-NTH', 'DTE1-LM81', 'S79-LM81', 'MWK-LM81',
+           'MCD-CMAL', 'KRU-LTCH', 'KRU-VCPVT', 'KRU-VCTD', 'KRU-AEON'],
+  matkhodong: ['KRU12-PVT', 'KRU9-MGQ9', 'KSY2-MGQ9', 'KSS3-GIGA', 'MCD1-QHU',
+               'KRU-TSPHI', 'KRU-LVV', 'KRU-VVN', 'KRU-GODN', 'KRU-GOTH'],
+  taruA: ['KRU5-NTP', 'KRU1-VCDK', 'KRU4-CMAL', 'KRU11-LOTTE', 'KRU10-PXL2', 'KRU13-VP6', 'KRU3-BCAT'],
+  taruB: ['KRU12-PVT', 'KRU9-MGQ9'],
+  ccdcT2: ['KRU12-PVT', 'KRU9-MGQ9', 'KSY2-MGQ9', 'KSS3-GIGA', 'MCD1-QHU',
+           'KRU-TSPHI', 'KRU-AEON', 'KRU-LVV', 'KRU-VVN', 'KRU-GODN', 'KRU-GOTH'],
+  ccdcT3: ['KRU5-NTP', 'KRU1-VCDK', 'KRU4-CMAL', 'KRU11-LOTTE', 'KRU10-PXL2', 'KRU13-VP6', 'KRU3-BCAT',
+           'KSY3-LOTTE', 'KSY1-LM81', 'KSS1-VHM', 'KSS5-PMAL', 'KSS6-CMAL',
+           'MCD3-HBT', 'MCD2-LM81', 'MCD4-ETL', 'MCD6-NTH', 'DTE1-LM81', 'S79-LM81', 'MWK-LM81',
+           'MCD-CMAL', 'KRU-LTCH', 'KRU-VCPVT', 'KRU-VCTD'],
+  danang: ['Toàn khu vực Đà Nẵng'],
+  hanoi: ['Toàn khu vực Hà Nội']
+};
+
+// Brand -> nhà hàng (đúng như phân nhóm "Brand ..." trong file Excel)
+const BRANDS = [
+  { name: 'KRU',  branches: ['KRU1-VCDK', 'KRU3-BCAT', 'KRU4-CMAL', 'KRU5-NTP', 'KRU9-MGQ9', 'KRU10-PXL2', 'KRU11-LOTTE', 'KRU12-PVT', 'KRU13-VP6'] },
+  { name: 'KSY',  branches: ['KSY1-LM81', 'KSY2-MGQ9', 'KSY3-LOTTE'] },
+  { name: 'KSS',  branches: ['KSS1-VHM', 'KSS3-GIGA', 'KSS5-PMAL', 'KSS6-CMAL'] },
+  { name: 'MCD',  branches: ['MCD1-QHU', 'MCD2-LM81', 'MCD3-HBT', 'MCD4-ETL', 'MCD6-NTH'] },
+  { name: 'DATE', branches: ['DTE1-LM81'] },
+  { name: 'FD',   branches: ['MWK-LM81', 'S79-LM81'] },
+  { name: 'Nhượng quyền', branches: ['KRU-AEON', 'KRU-GODN', 'KRU-GOTH', 'KRU-LTCH', 'KRU-LVV', 'KRU-TSPHI', 'KRU-VCPVT', 'KRU-VCTD', 'KRU-VVN', 'MCD-CMAL'] },
+  { name: 'Khu vực Đà Nẵng', branches: ['Toàn khu vực Đà Nẵng'] },
+  { name: 'Khu vực Hà Nội',  branches: ['Toàn khu vực Hà Nội'] }
+];
+
+// Quy định chung áp dụng cho mọi nhà hàng
+const GENERAL_RULES = [
+  'Nhà hàng lên đơn đặt hàng trên phần mềm trước ngày giao hàng là D-2 và trước 14h ngày gửi đơn.',
+  'Hàng bổ sung hoặc huỷ: gửi thông tin cho bếp tổng trước 10h ngày D-1 (ví dụ đơn giao ngày 10/01/26 thì báo huỷ trước 10h ngày 09/01/26). Không nhận bổ sung hoặc huỷ đơn vào Chủ nhật.',
+  'Nguyên vật liệu có HSD dưới 10 ngày: CK không nhận huỷ đơn liền kề (đơn lên thứ 2 về thứ 4 thì không được báo huỷ).',
+  'Khi nhận hàng: nhà hàng kiểm tra thực nhận cùng tài xế. Vấn đề thừa hoặc thiếu phải phản hồi cho CK trong ngày nhận hàng, quá thời gian trên mọi khiếu nại không được giải quyết.'
+];
+
+// Tìm các tuyến áp dụng cho một nhà hàng
+const routesOf = name => Object.keys(GROUPS).filter(k => GROUPS[k].includes(name));
+
+/* ====================== Giao diện chọn Brand / Nhà hàng ====================== */
+const brandSel = $('brand'), branchSel = $('branch');
+BRANDS.forEach(b => brandSel.appendChild(new Option(b.name, b.name)));
+
+function updateControls() {
+  const ok = !!brandSel.value && !!branchSel.value;     // bắt buộc chọn đủ mới cho tìm
+  $('btn').disabled = !ok || running;
+  $('hint').textContent = ok ? '' : (brandSel.value ? 'Hãy chọn Nhà hàng để bấm Tìm' : 'Hãy chọn đủ Brand và Nhà hàng để bấm Tìm');
+}
+
+brandSel.addEventListener('change', () => {
+  const b = BRANDS.find(x => x.name === brandSel.value);
+  branchSel.replaceChildren(new Option(b ? '-- Chọn nhà hàng --' : '-- Chọn brand trước --', ''));
+  if (b) b.branches.forEach(n => branchSel.appendChild(new Option(n, n)));      // chỉ nạp nhà hàng của brand đã chọn
+  branchSel.disabled = !b;
+  clearResult();
+  renderSchedule(null);
+  updateControls();
+});
+branchSel.addEventListener('change', () => { clearResult(); renderSchedule(branchSel.value || null); updateControls(); });
+
+/* ====================== Mốc thời gian đặt hàng ====================== */
+const WD = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
+const WD_FULL = ['Chủ nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'];
+
+function renderSchedule(name) {
+  const box = $('sched'), body = $('schedBody');
+  if (!name) { box.hidden = true; body.replaceChildren(); return; }
+  box.hidden = false; box.open = false;   // mặc định thu gọn
+  $('schedTitle').textContent = `Mốc thời gian đặt hàng: ${name}`;
+  body.replaceChildren();
+  const add = (tag, text, cls) => { const e = document.createElement(tag); if (cls) e.className = cls; e.textContent = text; body.appendChild(e); return e; };
+
+  const todayCode = WD[new Date().getDay()];
+  const todayHit = routesOf(name).some(k => ROUTES[k].rows.some(r => r.order === todayCode));
+  const badge = $('todayBadge');
+  badge.textContent = todayHit ? 'Hôm nay là ngày đặt hàng' : 'Hôm nay không phải là ngày đặt hàng';
+  badge.className = 'today' + (todayHit ? '' : ' no');
+
+  const keys = routesOf(name);
+  if (!keys.length) { add('p', 'Chưa có lịch đặt hàng cho nhà hàng này trong file lịch.', 'rule'); return; }
+  keys.forEach(k => {
+    const r = ROUTES[k];
+    add('div', r.cat, 'cat');
+    const t = document.createElement('table');
+    t.innerHTML = '<thead><tr><th>Ngày order</th><th>Ngày giao</th><th>Ngày sử dụng</th></tr></thead>';
+    const tb = document.createElement('tbody');
+    r.rows.forEach(row => {
+      const tr = tb.insertRow();
+      if (row.order === todayCode) tr.className = 'hit';
+      [row.order, row.deliver, row.use].forEach(v => { tr.insertCell().textContent = v; });
+    });
+    t.appendChild(tb); body.appendChild(t);
+    const note = r.rows.find(x => x.note);
+    if (note) add('div', 'Lưu ý: ' + note.note, 'note');
+  });
+  add('div', 'Quy định chung', 'cat');
+  GENERAL_RULES.forEach(g => add('div', '• ' + g, 'note'));
+  add('div', `Lịch áp dụng cho đơn hàng giao từ ${SCHEDULE_VALID_FROM}.`, 'note');
+}
+
+/* ====================== Timeline + tìm kiếm ====================== */
+const nodes = [...document.querySelectorAll('.node')];
+const fill = $('fill');
+let running = false, runId = 0;
+let rows = [];
+
+function setTimeline(activeIdx, state) {     // state: 'loading' | 'done' | 'warn' | 'error' | 'idle'
+  nodes.forEach((n, i) => {
+    n.className = 'node';
+    if (state === 'idle') return;
+    if (i < activeIdx) n.classList.add('done');
+    else if (i === activeIdx) n.classList.add(state === 'loading' ? 'active' : state);
+  });
+  const pct = state === 'idle' ? 0 : Math.min(activeIdx, 4) / 4 * 100;
+  fill.style.width = (pct * 0.8) + '%';      // đường nối chạy giữa tâm node đầu và node cuối (80% bề ngang)
+  fill.classList.toggle('loading', state === 'loading');
+}
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const setMsg = (t, warn) => { $('msg').textContent = t; $('msg').className = warn ? 'warn' : ''; };
+
+function clearResult() {
+  runId++; running = false; rows = [];
+  setTimeline(0, 'idle'); setMsg('');
+  $('wrap').className = 'wrap empty';
+  $('wrap').textContent = 'Chọn Brand và Nhà hàng, rồi bấm Tìm để xem dự đoán số lượng đặt hàng.';
+  $('dl').disabled = true;
+}
+
+async function fetchForecast(brand, branch) {
+  const r = await fetch(`${API}/api/ck-forecast?brand=${encodeURIComponent(brand)}&branch=${encodeURIComponent(branch)}`);
+  if (r.status === 404 || r.status === 501) { const e = new Error('not-ready'); e.notReady = true; throw e; }
+  if (r.status === 429) throw new Error('Bạn thao tác quá nhanh, thử lại sau ít phút');
+  if (r.status === 400) throw new Error((await r.json()).error || 'Tham số không hợp lệ');
+  if (!r.ok) throw new Error('Lỗi khi truy vấn, thử lại sau');
+  return r.json();
+}
+
+$('btn').onclick = async () => {
+  if (!brandSel.value || !branchSel.value || running) return;
+  const my = ++runId; running = true; updateControls();
+  $('dl').disabled = true; rows = [];
+  $('wrap').className = 'wrap empty'; $('wrap').textContent = 'Đang tính dự đoán...';
+  setMsg('Đang xử lý...');
+
+  // Gọi API ngay; hiệu ứng timeline chạy node 1 -> 4 trong lúc chờ, node 5 khi có kết quả
+  const result = fetchForecast(brandSel.value, branchSel.value).then(d => ({ ok: true, d }), e => ({ ok: false, e }));
+  let settled = false; result.then(() => { settled = true; });
+  for (let i = 0; i < 4; i++) {
+    if (my !== runId) return;
+    setTimeline(i, 'loading');
+    await sleep(settled ? 260 : 750);
+  }
+  if (my !== runId) return;
+  setTimeline(4, 'loading');
+  const res = await result;
+  if (my !== runId) return;
+  await sleep(350);
+  running = false; updateControls();
+
+  if (!res.ok) {
+    if (res.e.notReady) {
+      setTimeline(4, 'warn');
+      setMsg('Chưa có dữ liệu dự đoán: API tính dự đoán chưa được cấu hình. Mốc thời gian đặt hàng ở trên vẫn dùng được.', true);
+      $('wrap').textContent = 'Chưa có dữ liệu dự đoán cho nhà hàng này.';
+    } else {
+      setTimeline(4, 'error');
+      setMsg(res.e.message, true);
+      $('wrap').textContent = 'Không tải được dữ liệu.';
+    }
+    return;
+  }
+  setTimeline(4, 'done'); fill.style.width = '80%';
+  nodes.forEach(n => n.classList.add('done'));
+  renderGrid(res.d.rows || []);
+};
+
+/* ====================== Data grid + download ====================== */
+const LABELS = {
+  ma_nvl: 'Mã NVL', ten_nvl: 'Tên NVL', dvt: 'ĐVT', sl_ban_thang_truoc: 'SL bán tháng trước', dinh_muc_bom: 'Định mức BOM',
+  ton_kho: 'Tồn kho hôm trước', nhu_cau_du_doan: 'Nhu cầu dự đoán', sl_du_doan_dat: 'SL dự đoán đặt hàng'
+};
+const label = c => LABELS[c] || c;
+const fmtNum = v => (typeof v === 'number') ? v.toLocaleString('vi-VN', { maximumFractionDigits: 3 }) : v;
+
+function renderGrid(data) {
+  rows = data;
+  const wrap = $('wrap');
+  if (!rows.length) { wrap.className = 'wrap empty'; wrap.textContent = 'Không có dữ liệu'; setMsg('Không có dữ liệu'); return; }
+  const cols = Object.keys(rows[0]);
+  const t = document.createElement('table'); t.className = 'grid';
+  const hr = t.createTHead().insertRow();
+  cols.forEach(c => { const th = document.createElement('th'); th.textContent = label(c); hr.appendChild(th); });
+  const tb = t.createTBody();
+  rows.forEach(r => {
+    const tr = tb.insertRow();
+    cols.forEach(c => { const td = tr.insertCell(); td.textContent = fmtNum(r[c] ?? ''); if (typeof r[c] === 'number') td.className = 'num'; });   // textContent: chống XSS
+  });
+  wrap.className = 'wrap'; wrap.replaceChildren(t);
+  setMsg(`${rows.length.toLocaleString('vi-VN')} dòng`);
+  $('dl').disabled = false;
+}
+
+$('dl').onclick = () => {
+  if (!rows.length) return;
+  const cols = Object.keys(rows[0]);
+  const esc = v => {
+    let s = String(v ?? '');
+    if (typeof v === 'string' && /^[=+\-@]/.test(s)) s = "'" + s;   // chống CSV injection (không đụng tới số âm)
+    return `"${s.replace(/"/g, '""')}"`;
+  };
+  const csv = [cols.map(c => esc(label(c))).join(','), ...rows.map(r => cols.map(c => esc(r[c])).join(','))].join('\r\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }));  // BOM để Excel đọc đúng tiếng Việt
+  a.download = `du_doan_dat_hang_ck_${branchSel.value.replace(/[^\w\-]+/g, '_')}.csv`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+};
+
+/* ====================== Quy tắc (nút "i") ====================== */
+const RULES = [
+  'Phải chọn Brand trước. Danh sách Nhà hàng chỉ nạp các nhà hàng thuộc brand đã chọn. Nút Tìm chỉ bấm được khi đã chọn đủ Brand và Nhà hàng.',
+  'Khi chọn Nhà hàng, trang hiện ngay các mốc thời gian đặt hàng của nhà hàng đó: ngày order, ngày giao, ngày sử dụng theo từng tuyến hàng, kèm quy định chung (hạn 14h, hạn huỷ hoặc bổ sung 10h D-1...).',
+  `Lịch đặt hàng được cài sẵn trong trang theo file lịch đặt hàng CK (áp dụng cho đơn giao từ ${SCHEDULE_VALID_FROM}). Khi lịch đổi thì phải cập nhật lại trang.`,
+  'Brand "Khu vực Đà Nẵng" và "Khu vực Hà Nội": file lịch chỉ có lịch theo khu vực, không liệt kê từng nhà hàng, nên chọn mục "Toàn khu vực".',
+  'Brand KRU, KSY được ghi theo mã nhà hàng (file lịch ghi KUR, KYS). Tên nhà hàng giữ đúng như trong file lịch.',
+  'Thanh tiến trình có 5 bước: (1) Chi tiết BH tháng trước, (2) Danh sách mã NVL dùng order CK, (3) Danh sách BOM, (4) Chi tiết kiểm kê ngày hôm trước, (5) Dự đoán đặt hàng. Bấm Tìm thì thanh chạy từ bước 1 đến bước 5, có kết quả thì dừng ở bước 5.',
+  'Nếu chưa có dữ liệu dự đoán (API chưa cấu hình), bước 5 hiện màu vàng và lưới để trống; nếu lỗi thì bước 5 hiện màu đỏ.',
+  'Download CSV tải đúng các dòng đang hiển thị trên lưới.'
+];
+for (const t of RULES) { const li = document.createElement('li'); li.textContent = t; $('rulesList').appendChild(li); }
+$('infoBtn').onclick = () => $('rules').showModal();
+$('rules').addEventListener('click', e => { if (e.target === e.currentTarget) e.currentTarget.close(); });
+
+setTimeline(0, 'idle'); updateControls();
+</script>
+</body>
+</html>
