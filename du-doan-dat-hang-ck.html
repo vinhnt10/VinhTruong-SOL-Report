@@ -32,16 +32,18 @@
   button { cursor:pointer; }
   button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
   button:disabled { opacity:.5; cursor:not-allowed; }
+  label.chk { flex-direction:row; align-items:center; gap:6px; font-size:12.5px; color:var(--fg); padding-bottom:9px; }
+  label.chk input { padding:0; }
   #hint { font-size:12px; color:var(--muted); align-self:center; }
 
   /* ===== Timeline 5 node ===== */
   .timeline { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:18px 28px 14px; }
   .track { position:relative; display:flex; justify-content:space-between; }
-  .track::before { content:""; position:absolute; left:calc(10% ); right:calc(10%); top:15px; height:4px; background:var(--line); border-radius:2px; }
-  .fill { position:absolute; left:10%; top:15px; height:4px; width:0; background:var(--accent); border-radius:2px; transition:width .55s ease; }
+  .track::before { content:""; position:absolute; left:var(--half,10%); right:var(--half,10%); top:15px; height:4px; background:var(--line); border-radius:2px; }
+  .fill { position:absolute; left:var(--half,10%); top:15px; height:4px; width:0; background:var(--accent); border-radius:2px; transition:width .55s ease; }
   .fill.loading { background:linear-gradient(90deg, var(--accent) 0%, #7d9bff 50%, var(--accent) 100%); background-size:200% 100%; animation:flow 1s linear infinite; }
   @keyframes flow { to { background-position:-200% 0; } }
-  .node { position:relative; z-index:1; width:20%; display:flex; flex-direction:column; align-items:center; gap:8px; text-align:center; }
+  .node { position:relative; z-index:1; width:var(--nw,20%); display:flex; flex-direction:column; align-items:center; gap:8px; text-align:center; }
   .dot { width:34px; height:34px; border-radius:50%; background:#fff; border:3px solid var(--line); display:grid; place-items:center; font-size:13px; font-weight:700; color:var(--muted); transition:all .3s; }
   .node .lbl { font-size:12.5px; color:var(--muted); line-height:1.3; max-width:150px; }
   .node.active .dot { border-color:var(--accent); color:var(--accent); box-shadow:0 0 0 0 rgba(47,91,234,.5); animation:pulse 1.1s ease-out infinite; }
@@ -80,6 +82,15 @@
   table.grid th, table.grid td { padding:8px 12px; font-size:13px; border-bottom:1px solid var(--line); text-align:left; white-space:nowrap; }
   table.grid th { position:sticky; top:0; background:#f1f3f7; z-index:2; }
   table.grid td.num { text-align:right; font-variant-numeric: tabular-nums; }
+  dialog.big { width:min(1250px, calc(100% - 24px)); max-height:92vh; padding:16px 18px; }
+  .mafilters { display:flex; gap:8px; flex-wrap:wrap; margin:6px 0 10px; }
+  .mawrap { overflow:auto; max-height:68vh; border:1px solid var(--line); border-radius:8px; }
+  table.matb { border-collapse:separate; border-spacing:0; width:100%; }
+  table.matb th, table.matb td { padding:6px 10px; font-size:12.5px; border-bottom:1px solid var(--line); text-align:left; }
+  table.matb th { position:sticky; top:0; background:#f1f3f7; z-index:1; white-space:nowrap; }
+  table.matb td.c { text-align:center; color:var(--ok); font-weight:700; }
+  table.matb td.n { text-align:right; }
+  .note2 { font-size:12px; color:var(--muted); margin:8px 0 0; }
 </style>
 </head>
 <body>
@@ -92,6 +103,7 @@
     <label>Nhà hàng<select id="branch" disabled><option value="">-- Chọn brand trước --</option></select></label>
     <button id="btn" class="primary" disabled>Tìm</button>
     <button id="dl" disabled>Download CSV</button>
+    <button id="btnMa" type="button">Mã đặt hàng CK</button>
     <span id="hint">Hãy chọn đủ Brand và Nhà hàng để bấm Tìm</span>
   </div>
 
@@ -102,7 +114,8 @@
       <div class="node" data-i="1"><div class="dot">2</div><div class="lbl">Danh sách mã NVL dùng order CK</div></div>
       <div class="node" data-i="2"><div class="dot">3</div><div class="lbl">Danh sách BOM</div></div>
       <div class="node" data-i="3"><div class="dot">4</div><div class="lbl">Chi tiết kiểm kê ngày hôm trước</div></div>
-      <div class="node" data-i="4"><div class="dot">5</div><div class="lbl">Dự đoán đặt hàng</div></div>
+      <div class="node" data-i="4"><div class="dot">5</div><div class="lbl">Hàng đang vận chuyển</div></div>
+      <div class="node" data-i="5"><div class="dot">6</div><div class="lbl">Dự đoán đặt hàng</div></div>
     </div>
   </div>
   <div id="msg"></div>
@@ -115,6 +128,19 @@
   <div class="wrap empty" id="wrap">Chọn Brand và Nhà hàng, rồi bấm Tìm để xem dự đoán số lượng đặt hàng.</div>
 </main>
 
+<dialog class="rules big" id="maDlg">
+  <button type="button" class="close primary" id="maClose" style="float:right">Đóng</button>
+  <h2>Mã đặt hàng CK <span id="maCnt" style="font-weight:400;font-size:13px;color:var(--muted)"></span></h2>
+  <div class="mafilters">
+    <input id="maQ" placeholder="Tìm mã hoặc tên vật tư..." size="28">
+    <select id="maNhom"><option value="">Mọi nhóm hàng</option></select>
+    <select id="maTo"><option value="">Mọi phân tổ</option></select>
+    <select id="maBrand"><option value="">Mọi brand</option></select>
+  </div>
+  <div class="mawrap"><table class="matb"><thead id="maHead"></thead><tbody id="maBody"></tbody></table></div>
+  <p class="note2">Dấu ✓ = brand có đặt mã vật tư đó từ CK. Nguồn: file "Danh mục NVL BTP hệ thống SOL 10.2026 NH đặt CK".</p>
+</dialog>
+
 <dialog class="rules" id="rules">
   <h2>Quy tắc: Dự đoán SL đặt hàng CK theo từng NH</h2>
   <ul id="rulesList"></ul>
@@ -123,6 +149,7 @@
 
 <script src="depts.js"></script>
 <script src="auth.js"></script>
+<script src="bom-kru-data.js"></script>
 <script>
 // >>> Đổi thành domain API của bạn (không có dấu / ở cuối)
 const API = 'https://report-api.orderpermillion.trade';
@@ -185,8 +212,8 @@ const GROUPS = {
 
 // Brand -> nhà hàng (đúng như phân nhóm "Brand ..." trong file Excel)
 const BRANDS = [
-  { name: 'KRU',  branches: ['KRU1-VCDK', 'KRU3-BCAT', 'KRU4-CMAL', 'KRU5-NTP', 'KRU9-MGQ9', 'KRU10-PXL2', 'KRU11-LOTTE', 'KRU12-PVT', 'KRU13-VP6'] },
-  { name: 'KSY',  branches: ['KSY1-LM81', 'KSY2-MGQ9', 'KSY3-LOTTE'] },
+  { name: 'KRU',  branches: ['KRU1-VCDK', 'KRU3-BCAT', 'KRU4-CMAL', 'KRU5-NTP', 'KRU9-MGQ9', 'KRU11-LOTTE', 'KRU14-PVT', 'KRU15-VP6', 'KRU20-PXL2'] },
+  { name: 'KSY',  branches: ['KSY1-LM81', 'KSY2-MGQ9', 'KSY3-LTQ7'] },
   { name: 'KSS',  branches: ['KSS1-VHM', 'KSS3-GIGA', 'KSS5-PMAL', 'KSS6-CMAL'] },
   { name: 'MCD',  branches: ['MCD1-QHU', 'MCD2-LM81', 'MCD3-HBT', 'MCD4-ETL', 'MCD6-NTH'] },
   { name: 'DATE', branches: ['DTE1-LM81'] },
@@ -205,7 +232,9 @@ const GENERAL_RULES = [
 ];
 
 // Tìm các tuyến áp dụng cho một nhà hàng
-const routesOf = name => Object.keys(GROUPS).filter(k => GROUPS[k].includes(name));
+// Tên nhà hàng trên trang = tên trong DB. File lịch đặt hàng dùng tên khác cho vài nhà hàng, nên khi tra lịch phải đổi về tên trong file lịch.
+const SCHED_ALIAS = { 'KRU20-PXL2': 'KRU10-PXL2', 'KRU15-VP6': 'KRU13-VP6', 'KRU14-PVT': 'KRU12-PVT', 'KSY3-LTQ7': 'KSY3-LOTTE' };
+const routesOf = name => Object.keys(GROUPS).filter(k => GROUPS[k].includes(SCHED_ALIAS[name] || name));
 
 /* ====================== Giao diện chọn Brand / Nhà hàng ====================== */
 const brandSel = $('brand'), branchSel = $('branch');
@@ -270,6 +299,11 @@ function renderSchedule(name) {
 
 /* ====================== Timeline + tìm kiếm ====================== */
 const nodes = [...document.querySelectorAll('.node')];
+const NN = nodes.length, LAST = NN - 1;                       // số node (hiện 6), chỉ số node cuối
+document.querySelector('.track').style.setProperty('--half', (50 / NN) + '%');
+document.querySelector('.track').style.setProperty('--nw', (100 / NN) + '%');
+const TRANSIT_NODE = 4, TRANSIT_READY = false;       // node 5 "Hàng đang vận chuyển": chưa có nguồn dữ liệu nên tô đỏ khi thanh chạy tới (đổi TRANSIT_READY = true khi có dữ liệu)
+const FILL_MAX = 100 - 100 / NN;                               // đường nối chạy giữa tâm node đầu và tâm node cuối (% bề ngang)
 const fill = $('fill');
 let running = false, runId = 0;
 let rows = [];
@@ -280,9 +314,10 @@ function setTimeline(activeIdx, state) {     // state: 'loading' | 'done' | 'war
     if (state === 'idle') return;
     if (i < activeIdx) n.classList.add('done');
     else if (i === activeIdx) n.classList.add(state === 'loading' ? 'active' : state);
+    if (!TRANSIT_READY && i === TRANSIT_NODE && i <= activeIdx) { n.classList.remove('done', 'active', 'warn'); n.classList.add('error'); n.title = 'Chưa có dữ liệu hàng đang vận chuyển'; }
   });
-  const pct = state === 'idle' ? 0 : Math.min(activeIdx, 4) / 4 * 100;
-  fill.style.width = (pct * 0.8) + '%';      // đường nối chạy giữa tâm node đầu và node cuối (80% bề ngang)
+  const pct = state === 'idle' ? 0 : Math.min(activeIdx, LAST) / LAST * 100;
+  fill.style.width = (pct * FILL_MAX / 100) + '%';
   fill.classList.toggle('loading', state === 'loading');
 }
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -296,13 +331,154 @@ function clearResult() {
   $('dl').disabled = true;
 }
 
+/* ====================== Tính SL đặt hàng ======================
+   Node 1: API /api/ck-data  -> SL bán tháng trước theo món (SQL)
+   Node 2: MA_DATA           -> danh mục mã vật tư đặt từ CK của brand (hardcode, nút "Mã đặt hàng CK")
+   Node 3: BOM_KRU           -> bom-kru-data.js (BOM + BTP của brand KRU)
+   Node 4: API /api/ck-data  -> kiểm kê D-1 (hoặc D-2) (SQL)
+   Node 5: ghép lại + lịch đặt hàng (ROUTES/GROUPS) -> SL đề xuất đặt                                   */
+
+const WDN = { CN: 0, T2: 1, T3: 2, T4: 3, T5: 4, T6: 5, T7: 6 };
+const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+const dayOnly = d => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+const nextWd = (from, wd, strict) => { let d = addDays(dayOnly(from), strict ? 1 : 0); while (d.getDay() !== wd) d = addDays(d, 1); return d; };
+const fmtD = d => `${WD[d.getDay()]} ${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`;
+const parseUse = str => {
+  const t = String(str).match(/CN|T[2-7]/g) || [];
+  const w = /(\d+)\s*tuần/i.exec(str);
+  return (!t.length && w) ? { days: 7 * Number(w[1]), first: null, wds: null } : { days: t.length, first: t[0], wds: t.map(x => WDN[x]) };
+};
+
+// Chọn lịch gần nhất của một tuyến: ngày order, ngày giao, ngày bắt đầu dùng, số ngày dùng
+function nextSlot(routeKey, now) {
+  const today = dayOnly(now);
+  let best = null;
+  for (const row of ROUTES[routeKey].rows) {
+    let od = nextWd(today, WDN[row.order], false);
+    if (best && od >= best.od) continue;
+    const dtok = (row.deliver.match(/CN|T[2-7]/) || [])[0];
+    let dd = nextWd(od, WDN[dtok], true);
+    if (/tuần kế tiếp/.test(row.deliver)) dd = addDays(dd, 7);
+    const u = parseUse(row.use);
+    best = { od, dd, fu: u.first ? nextWd(dd, WDN[u.first], false) : dd, days: u.days, row, useWds: u.wds };
+  }
+  return best;
+}
+
 async function fetchForecast(brand, branch) {
-  const r = await fetch(`${API}/api/ck-forecast?brand=${encodeURIComponent(brand)}&branch=${encodeURIComponent(branch)}`);
+  if (brand !== 'KRU') { const e = new Error('no-bom'); e.noBom = true; throw e; }
+  const r = await fetch(`${API}/api/ck-data?branch=${encodeURIComponent(branch)}`);
   if (r.status === 404 || r.status === 501) { const e = new Error('not-ready'); e.notReady = true; throw e; }
   if (r.status === 429) throw new Error('Bạn thao tác quá nhanh, thử lại sau ít phút');
   if (r.status === 400) throw new Error((await r.json()).error || 'Tham số không hợp lệ');
   if (!r.ok) throw new Error('Lỗi khi truy vấn, thử lại sau');
-  return r.json();
+  return compute(await r.json(), branch, true);   // luôn tính cả dòng BOM ghi "thay thế"; chọn mã theo ngày hiệu lực (pickAlt)
+}
+
+// Các nhóm mã CK thay thế cho nhau (cùng một nguyên liệu). Trong một món, mỗi nhóm chỉ giữ MỘT mã: mã có ngày hiệu lực mới nhất (không quá hôm nay).
+// File BOM không ghi dòng nào thay dòng nào, nên nhóm khai báo thủ công ở đây. Thêm nhóm mới = thêm một mảng mã vật tư.
+const ALT_GROUPS = [
+  ['12230028', '12230029'],   // Tôm nobashi 15G / 20G
+  ['13300086', '13300007']    // Bột Tempura / Flour Tempura Ko Showa
+];
+const parseVN = v => { const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(v || ''); return m ? new Date(+m[3], +m[2] - 1, +m[1]) : new Date(0); };
+function pickAlt(rows, now) {
+  let out = rows;
+  for (const g of ALT_GROUPS) {
+    const cand = out.filter(r => g.includes(r[2]));
+    if (cand.length < 2 || new Set(cand.map(r => r[2])).size < 2) continue;
+    const valid = cand.filter(r => parseVN(r[6]) <= now);
+    const pool = valid.length ? valid : cand;
+    const best = pool.reduce((a, b) => (parseVN(b[6]) > parseVN(a[6]) ? b : a))[2];
+    out = out.filter(r => !g.includes(r[2]) || r[2] === best);
+  }
+  return out;
+}
+
+function compute(api, branch, incSub) {
+  const warn = [], now = new Date();
+  // Node 2: mã CK của brand KRU
+  const bi = MA_BRANDS.indexOf('KRU');
+  const ck = new Map(MA_DATA.filter(r => r[6][bi] === '1').map(r => [String(r[0]), r]));
+  // Node 3: BOM món và BTP
+  const keep = r => incSub || !r[8];
+  const idx = rows => { const m = new Map(); rows.filter(keep).forEach(r => { (m.get(r[0]) || m.set(r[0], []).get(r[0])).push(r); }); return m; };
+  const bom = idx(BOM), btp = idx(BTP);
+  // Node 1: SL bán -> trung bình ngày
+  // Số lần mỗi thứ xuất hiện trong tháng trước (để ra trung bình của từng thứ)
+  const occ = [0, 0, 0, 0, 0, 0, 0];
+  for (let d = new Date(api.sales_from + 'T00:00:00'); d <= new Date(api.sales_to + 'T00:00:00'); d = addDays(d, 1)) occ[d.getDay()]++;
+  const sold = new Map(), names = new Map();   // sold: món -> [SL trung bình mỗi ngày của thứ CN, T2, ..., T7]
+  api.sales.forEach(x => {
+    const k = String(x.ma_mon).replace(/-1$/, ''), w = Number(x.thu);
+    if (!sold.has(k)) sold.set(k, [0, 0, 0, 0, 0, 0, 0]);
+    sold.get(k)[w] += occ[w] ? Number(x.so_luong) / occ[w] : 0;
+    names.set(k, x.ten_mon);
+  });
+  const perDay = new Map();    // vật tư -> [nhu cầu mỗi ngày theo từng thứ]
+  const add = (vt, arr, f, depth) => {
+    if (ck.has(vt)) { const t = perDay.get(vt) || perDay.set(vt, [0, 0, 0, 0, 0, 0, 0]).get(vt); arr.forEach((q, i) => { t[i] += q * f; }); return; }
+    if (depth < 3 && btp.has(vt)) pickAlt(btp.get(vt), now).forEach(c => { if (c[2]) add(c[2], arr, f * c[5], depth + 1); });   // bung BTP
+  };
+  const noBom = [], badRows = new Set();
+  sold.forEach((arr, dish) => {
+    const rows0 = bom.get(dish), qty = arr.reduce((a, b) => a + b, 0);
+    const rows = rows0 && pickAlt(rows0, now);
+    if (!rows) { if (qty > 0) noBom.push([dish, Math.round(qty * 7 * 10) / 10]); return; }
+    rows.forEach(r => { if (!r[2]) badRows.add(r[1]); else add(r[2], arr, r[5], 0); });
+  });
+  if (noBom.length) {
+    noBom.sort((a, b) => b[1] - a[1]);
+    warn.push(`${noBom.length} món có bán nhưng chưa có BOM (bỏ qua): ` + noBom.slice(0, 3).map(([k, q]) => `${names.get(k)} (~${q}/tuần)`).join(', ') + (noBom.length > 3 ? '...' : ''));
+  }
+  if (badRows.size) warn.push(`BOM thiếu mã vật tư ở ${badRows.size} món đang bán (bỏ qua): ` + [...badRows].slice(0, 3).join(', '));
+  // Node 4: tồn kiểm kê
+  const stock = new Map();
+  api.stock.forEach(x => stock.set(String(x.ma_hang), (stock.get(String(x.ma_hang)) || 0) + Number(x.so_luong_kiem || 0)));
+  // Node 5: hàng CK đã xuất nhưng nhà hàng chưa nhập kho (làm tăng tồn). CHƯA CÓ NGUỒN DỮ LIỆU: API chưa trả api.transit nên coi bằng 0.
+  // Khi có nguồn, API trả api.transit = [{ ma_hang, so_luong }] (hàng đang đi đường, cộng vào tồn trước ngày bắt đầu dùng).
+  const transit = new Map();
+  (api.transit || []).forEach(x => transit.set(String(x.ma_hang), (transit.get(String(x.ma_hang)) || 0) + Number(x.so_luong || 0)));
+  if (!api.transit) warn.push('Hàng đang vận chuyển: chưa có dữ liệu, coi bằng 0 (kết quả có thể đặt dư)');
+  const sd = api.stock_date ? dayOnly(new Date(api.stock_date + 'T00:00:00')) : null;
+  if (!sd) warn.push('Không có kiểm kê D-1, D-2: coi tồn = 0');
+  else warn.push(`Tồn lấy từ kiểm kê ngày ${fmtD(sd)}`);
+  // Lịch đặt hàng của nhà hàng
+  const keys = routesOf(branch);
+  const pick = (...c) => c.find(k => keys.includes(k));
+  const out = [];
+  const push = (row, od) => { Object.defineProperty(row, '_od', { value: od ? od.getTime() : 9e15 }); out.push(row); };
+  const late = now.getHours() >= 14;
+  perDay.forEach((pdw, vt) => {
+    const m = ck.get(vt), nhom = m[4], avg = pdw.reduce((a, b) => a + b, 0) / 7;
+    const pd = avg;
+    let rk, note = [];
+    if (nhom === 'Hàng CCDC') rk = pick('ccdcT2', 'ccdcT3');
+    else if (nhom === 'Hàng đông') { rk = pick('matkhodong'); if (!rk) { rk = pick('matkho'); if (rk) note.push('Hàng đông: dùng lịch hàng mát - khô'); } }
+    else rk = pick('matkhodong', 'matkho');
+    if (!rk) { push({ ma_nvl: vt, ten_nvl: m[1], dvt: m[2], nhom_hang: nhom, nhu_cau_ngay: Math.round(avg * 1000) / 1000, so_ngay_dung: '', nhu_cau_ky: '', ton_kiem_ke: stock.get(vt) ?? 0, hang_van_chuyen: transit.get(vt) || 0,
+                         ton_du_kien: '', sl_du_doan_dat: '', quy_doi_kg: m[5], sl_dat_quy_kg: '', ngay_order: '', ngay_giao: '', ghi_chu: 'Chưa có lịch đặt hàng cho nhà hàng này' }, null); return; }
+    const sl = nextSlot(rk, now);
+    if (ROUTES[rk].rows[0].note) note.push(ROUTES[rk].rows[0].note + ' (trang chưa xét tuần)');
+    const has = stock.has(vt), ton = stock.get(vt) ?? 0;
+    let used = 0;                                                                // tiêu thụ từ ngày kiểm kê đến hết ngày trước ngày bắt đầu dùng, theo đúng thứ của từng ngày
+    if (sd) for (let d = sd; d < sl.fu; d = addDays(d, 1)) used += pdw[d.getDay()];
+    const tr = transit.get(vt) || 0;
+    const proj = Math.max(0, ton + tr - used);
+    let need = 0;                                                                // nhu cầu các ngày sử dụng, theo đúng thứ của từng ngày
+    if (sl.useWds) sl.useWds.forEach(w => { need += pdw[w]; });
+    else for (let i = 0; i < sl.days; i++) need += pdw[(sl.fu.getDay() + i) % 7];
+    if (sd && !has) note.push('Không có trong kiểm kê (coi tồn = 0)');
+    if (late && sl.od.getTime() === dayOnly(now).getTime()) note.push('Đã quá 14h (hạn đặt), kết quả chỉ để tham khảo');
+    const dat = Math.ceil(Math.max(0, need - proj) * 100) / 100;
+    push({ ma_nvl: vt, ten_nvl: m[1], dvt: m[2], nhom_hang: nhom,
+               nhu_cau_ngay: Math.round(avg * 1000) / 1000, so_ngay_dung: sl.days, nhu_cau_ky: Math.round(need * 100) / 100,
+               ton_kiem_ke: ton, hang_van_chuyen: tr, ton_du_kien: Math.round(proj * 100) / 100, sl_du_doan_dat: dat,
+               quy_doi_kg: m[5], sl_dat_quy_kg: Math.round(dat * Number(m[5] || 0) * 100) / 100,
+               ngay_order: fmtD(sl.od), ngay_giao: fmtD(sl.dd), ghi_chu: note.join('; ') }, sl.od);
+  });
+  out.sort((a, b) => (a._od - b._od) || String(a.nhom_hang).localeCompare(b.nhom_hang, 'vi') || String(a.ten_nvl).localeCompare(b.ten_nvl, 'vi'));
+  return { rows: out, warn, salesFrom: api.sales_from, salesTo: api.sales_to };
 }
 
 $('btn').onclick = async () => {
@@ -315,39 +491,45 @@ $('btn').onclick = async () => {
   // Gọi API ngay; hiệu ứng timeline chạy node 1 -> 4 trong lúc chờ, node 5 khi có kết quả
   const result = fetchForecast(brandSel.value, branchSel.value).then(d => ({ ok: true, d }), e => ({ ok: false, e }));
   let settled = false; result.then(() => { settled = true; });
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < LAST; i++) {
     if (my !== runId) return;
     setTimeline(i, 'loading');
     await sleep(settled ? 260 : 750);
   }
   if (my !== runId) return;
-  setTimeline(4, 'loading');
+  setTimeline(LAST, 'loading');
   const res = await result;
   if (my !== runId) return;
   await sleep(350);
   running = false; updateControls();
 
   if (!res.ok) {
-    if (res.e.notReady) {
-      setTimeline(4, 'warn');
-      setMsg('Chưa có dữ liệu dự đoán: API tính dự đoán chưa được cấu hình. Mốc thời gian đặt hàng ở trên vẫn dùng được.', true);
+    if (res.e.noBom) {
+      setTimeline(LAST, 'warn');
+      setMsg('Brand này chưa có BOM trong hệ thống (hiện mới có BOM brand KRU). Mốc thời gian đặt hàng ở trên vẫn dùng được.', true);
+      $('wrap').textContent = 'Chưa có dữ liệu dự đoán cho brand này.';
+    } else if (res.e.notReady) {
+      setTimeline(LAST, 'warn');
+      setMsg('API chưa có /api/ck-data: cần copy ckdata.js, thêm dòng require vào server.js và chạy script SQL 07.', true);
       $('wrap').textContent = 'Chưa có dữ liệu dự đoán cho nhà hàng này.';
     } else {
-      setTimeline(4, 'error');
+      setTimeline(LAST, 'error');
       setMsg(res.e.message, true);
       $('wrap').textContent = 'Không tải được dữ liệu.';
     }
     return;
   }
-  setTimeline(4, 'done'); fill.style.width = '80%';
-  nodes.forEach(n => n.classList.add('done'));
+  setTimeline(LAST, 'done'); fill.style.width = FILL_MAX + '%';
+  nodes.forEach((n, i) => { if (TRANSIT_READY || i !== TRANSIT_NODE) n.classList.add('done'); });
   renderGrid(res.d.rows || []);
+  if (res.d.rows.length) setMsg(`${res.d.rows.length} mã vật tư · SL bán ${res.d.salesFrom} đến ${res.d.salesTo} · ` + res.d.warn.join(' · '), res.d.warn.some(w => !w.startsWith('Tồn lấy')));
 };
 
 /* ====================== Data grid + download ====================== */
 const LABELS = {
-  ma_nvl: 'Mã NVL', ten_nvl: 'Tên NVL', dvt: 'ĐVT', sl_ban_thang_truoc: 'SL bán tháng trước', dinh_muc_bom: 'Định mức BOM',
-  ton_kho: 'Tồn kho hôm trước', nhu_cau_du_doan: 'Nhu cầu dự đoán', sl_du_doan_dat: 'SL dự đoán đặt hàng'
+  ma_nvl: 'Mã vật tư', ten_nvl: 'Tên vật tư', dvt: 'ĐVT', nhom_hang: 'Nhóm hàng', nhu_cau_ngay: 'Nhu cầu/ngày', so_ngay_dung: 'Số ngày dùng',
+  nhu_cau_ky: 'Nhu cầu cả kỳ', ton_kiem_ke: 'Tồn kiểm kê', hang_van_chuyen: 'Hàng đang vận chuyển', ton_du_kien: 'Tồn dự kiến lúc dùng', sl_du_doan_dat: 'SL đề xuất đặt', quy_doi_kg: 'Quy đổi ra ĐVT Kg (1 ĐVT = ? Kg)', sl_dat_quy_kg: 'SL đề xuất đặt quy ra Kg',
+  ngay_order: 'Ngày order', ngay_giao: 'Ngày giao', ghi_chu: 'Ghi chú'
 };
 const label = c => LABELS[c] || c;
 const fmtNum = v => (typeof v === 'number') ? v.toLocaleString('vi-VN', { maximumFractionDigits: 3 }) : v;
@@ -366,7 +548,6 @@ function renderGrid(data) {
     cols.forEach(c => { const td = tr.insertCell(); td.textContent = fmtNum(r[c] ?? ''); if (typeof r[c] === 'number') td.className = 'num'; });   // textContent: chống XSS
   });
   wrap.className = 'wrap'; wrap.replaceChildren(t);
-  setMsg(`${rows.length.toLocaleString('vi-VN')} dòng`);
   $('dl').disabled = false;
 }
 
@@ -386,6 +567,41 @@ $('dl').onclick = () => {
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
 };
 
+/* ====================== Mã đặt hàng CK (hardcode từ file Excel "Danh mục NVL BTP hệ thống SOL 10.2026 NH đặt CK") ====================== */
+const MA_BRANDS = ["KRU nhượng quyền", "KRU", "KSS", "KSY", "MWK", "S79", "MCD", "MCD nhượng quyền"];
+// [Mã vật tư, Tên vật tư, ĐVT, Phân tổ, Nhóm hàng, Quy đổi ra ĐVT Kg, cờ brand (1 = có đặt, theo thứ tự MA_BRANDS)]
+const MA_DATA = [[21000188,"VP Cà ri udon - Văn phòng","Kg","CB Thịt + Trứng","Hàng đông",1,"11000000"],[21000266,"VP chicken oil/ Dầu gà","L","CB Thịt + Trứng","Hàng đông",1,"00000011"],[21000298,"VP Trứng ngâm","Cái","CB Thịt + Trứng","Hàng mát",0.06,"11000011"],[21000339,"Egg Chicken/Trứng gà Osen Tamago","Cái","CB Thịt + Trứng","Hàng mát",0.06,"11110011"],[21000395,"VP Xá xíu vụn","kg","CB Thịt + Trứng","Hàng đông",1,"00000011"],[21000487,"CK Xá xíu heo KUR","kg","CB Thịt + Trứng","Hàng đông",1,"01000000"],[21000488,"CK Xá xíu heo MCD","kg","CB Thịt + Trứng","Hàng đông",1,"00000011"],[21000535,"CK Bò xào hành tây","kg","CB Thịt + Trứng","Hàng đông",1,"01010000"],[21000536,"CK Soboro Bò bằm xào sa tế","kg","CB Thịt + Trứng","Hàng đông",1,"11000000"],[21000547,"CK Xá xíu heo KRU mới","kg","CB Thịt + Trứng","Hàng đông",1,"10000000"],[21000684,"CK Heo xào hành tây","kg","CB Thịt + Trứng","Hàng đông",1,"11000000"],[21000417,"Mì ramen lớn (100g/ Vắt )","Vắt","Mì","Hàng mát",0.1,"01110000"],[21000505,"CK Mì ramen 18s MCD 150gr/vắt","Vắt","Mì","Hàng mát",0.15,"00000011"],[21000506,"CK Mì ramen 28s MCD 120gr/vắt","Vắt","Mì","Hàng mát",0.12,"00000011"],[21000515,"CK Mì ramen RC28S (100g/vắt) mới","Vắt","Mì","Hàng mát",0.1,"11000000"],[21000516,"CK Mì Udon (200g/vắt) mới","Vắt","Mì","Hàng đông",0.2,"11110000"],[11130019,"Beef Short Plate-US/Ba chỉ bò Mỹ bào (1.5mm)","kg","Nguyên liệu","Hàng đông",1,"01110001"],[11141005,"Beef Kobe Sirloin","kg","Nguyên liệu","Hàng đông",1,"00001000"],[11142006,"Beef Wagyu Sirloin","kg","Nguyên liệu","Hàng đông",1,"00001000"],[11200010,"Pork Fat/Mỡ lưng heo","kg","Nguyên liệu","Hàng đông",1,"11000001"],[11300002,"Chicken Leg-fillet/Đùi gà phile","kg","Nguyên liệu","Hàng đông",1,"00000001"],[11300026,"Trứng cút bóc vỏ","cái","Nguyên liệu","Hàng mát",0.001,"00000001"],[11300032,"Gà tẩm bột","kg","Nguyên liệu","Hàng đông",1,"01000000"],[12110050,"Cá saba filet còn xương 725g/gói","Gói","Nguyên liệu","Hàng đông",0.725,"00010000"],[12230013,"Tôm phủ bột 260g (10 con/khay)","Khay","Nguyên liệu","Hàng đông",0.3,"10000001"],[12230028,"Tôm thịt, tôm duỗi, còn đuôi (Nobashi) (15G, 20con/khay, 300g/khay)","Khay","Nguyên liệu","Hàng đông",0.3,"11000011"],[12230029,"Tôm thịt, tôm duỗi, còn đuôi (Nobashi) (20G, 20con/khay, 400g/khay)","Khay","Nguyên liệu","Hàng đông",0.4,"01110010"],[12420015,"Mai cua","Cái","Nguyên liệu","Hàng khô",0.03,"01110000"],[12420016,"Cồi sò điệp baby size 40/60 cồi/kg","kg","Nguyên liệu","Hàng đông",1,"11000000"],[12600002,"Eel Japan (3pcs/kg)/Unagi/Lươn Nhật 3 con","kg","Nguyên liệu","Hàng đông",1,"00000001"],[12600003,"Fish Grilled-chopped (160g/stk)/Kamaboko/Chả cá hồng","Cây 160G","Nguyên liệu","Hàng đông",0.16,"11000000"],[12600004,"Fish Grilled-chopped frozen (160g/stk)/Naruto Maki/Chả cá xoắn đông lạnh","Cây 160G","Nguyên liệu","Hàng đông",0.16,"00000001"],[12600024,"Chả cá đông lạnh Kotobuki Chikuwa (Gói 1.152kg) (32gx36/gói)","Gói","Nguyên liệu","Hàng đông",1.152,"11000000"],[12600030,"Chả cá SATSUMA AGE 800g","Gói","Nguyên liệu","Hàng đông",0.8,"10000000"],[13110006,"Fish dried (1.5kg/pkt)/Bột cá sấy khô tổng hợp","Gói 1.5Kg","Nguyên liệu","Hàng khô",1.5,"10000000"],[13110027,"Spc Salt/Muối tinh","kg","Nguyên liệu","Hàng khô",1,"00000001"],[13110030,"Sugar White/Đường cát trắng","kg","Nguyên liệu","Hàng khô",1,"00000001"],[13110033,"Spc Broth mix-Beef Dashida/Bột nêm bò Dashida","kg","Nguyên liệu","Hàng khô",1,"00000001"],[13110034,"Sauce Tomato Cholimex (2.1kg/tin)/Tương cà Cholimex","Bình 2.1Kg","Nguyên liệu","Hàng khô",2.1,"10000000"],[13110035,"Sauce Chili-Cholimex (5kg/box)/Tương ớt Cholimex","Bình 5Kg","Nguyên liệu","Hàng khô",5,"10000000"],[13110048,"Sauce Mayonaise-Ajinomoto (3kg/tin)/Sốt Mayonaise","Hộp 3Kg","Nguyên liệu","Hàng khô",3,"10000001"],[13110053,"Hành phi (Gói 500g)","Gói 500G","Nguyên liệu","Hàng khô",0.5,"11000001"],[13110109,"Sauce Gochujang Chili Korea /Tương ớt Hàn Quốc gochujang (1kg/ gói )","kg","Nguyên liệu","Hàng khô",1,"00010001"],[13110151,"Bột Tứ Xuyên (100g/gói)","Gói","Nguyên liệu","Hàng khô",0.1,"11000000"],[13120003,"Fish dried (500g/pkt)/Katsuobushi/Cá bào sợi lớn","Gói 500G","Nguyên liệu","Hàng khô",0.5,"10000000"],[13120007,"Seaweed Ao nori (15g/pkt)/Rong biển Ao nori","Gói 15G","Nguyên liệu","Hàng khô",0.15,"10000001"],[13120012,"Seed Sesame-white/Mè trắng","kg","Nguyên liệu","Hàng khô",1,"10000000"],[13120028,"Spc Chili powder-Karai (1kg/pkt)/Ớt bột Karai","kg","Nguyên liệu","Hàng khô",1,"00110000"],[13120069,"Dầu ớt Leekumkee 207g/chai","Chai 207g","Nguyên liệu","Hàng khô",0.21,"00000001"],[13120072,"Sốt ớt cay Tobanchan 1kg","kg","Nguyên liệu","Hàng khô",1,"00000001"],[13120073,"Katsua powder/ Bột nêm cá ngừ (Hộp 300g)","Hộp","Nguyên liệu","Hàng khô",0.3,"00000011"],[13120075,"Tỏi xay nhuyễn grinded garllic oroshi ninniku (Hũ 908g)","Hũ","Nguyên liệu","Hàng khô",0.91,"00000001"],[13120100,"Rong biển Yakinori (125g/gói)","Gói","Nguyên liệu","Hàng khô",0.125,"10000001"],[13210018,"Oil Sesame (250ml/bot)/Dầu mè con két","Chai 250Ml","Nguyên liệu","Hàng khô",0.25,"00000001"],[13210021,"Oil Cooking-Cai Lan (25kg/can)/Dầu ăn Cái Lân","Can 25kg","Nguyên liệu","Hàng khô",25,"10000001"],[13210058,"Dầu mè Tường An 1L/botle","Chai 1L","Nguyên liệu","Hàng khô",1,"10000000"],[13210062,"Nước đường bắp Hàn Quốc 700g","Chai","Nguyên liệu","Hàng khô",0.7,"10000000"],[13220014,"Sauce Okonomi atafuku (2.1kg/jar)/Sốt Okonomi","Bình 2.1Kg","Nguyên liệu","Hàng khô",2.1,"11000001"],[13220016,"Sauce Soya Higashimaru Usukuchi (1.8L/bot)/Nước tương lạt Usukuchi","Chai 1.8L","Nguyên liệu","Hàng khô",1.8,"00000001"],[13220030,"Miso Ramen Soup Base Thùng (1.8Lx6)","Chai 1.8L","Nguyên liệu","Hàng khô",1.8,"00000011"],[13220032,"Shoyu Ramen Soup Base (Thùng 18L)","Thùng 18L","Nguyên liệu","Hàng khô",18,"00000011"],[13220033,"Ramen Soup Tsuke Dare (1.8Lx6)","Chai 1.8L","Nguyên liệu","Hàng khô",1.8,"00000011"],[13220034,"Tonkotsu Ramen Soup Base Thùng (1kgx12)","kg","Nguyên liệu","Hàng khô",1,"00000011"],[13220051,"Sốt lươn nướng Unagi Kabayaki  2.16kg/Bình","Bình","Nguyên liệu","Hàng khô",2.16,"00000001"],[13220056,"Nước xốt E-Basic Donburi No Tare (Ebara) Chai 2.195kg","Chai","Nguyên liệu","Hàng khô",2.195,"10000001"],[13220080,"Nước tương Japnese Soy Sauce Extra 1L","Chai","Nguyên liệu","Hàng khô",1,"10000000"],[13220082,"Nước xốt Minrin Sweet - Cooking Sauce 1,8L","Chai","Nguyên liệu","Hàng khô",1.8,"01110000"],[13300002,"Flour Nama panko (2kg/pkt)/Bột xù trắng xay","Gói 2Kg","Nguyên liệu","Hàng đông",2,"00000001"],[13300007,"Flour Tempura-Ko Showa (700g/pkt)/Bột chiên tempura","Gói 700G","Nguyên liệu","Hàng khô",0.7,"11110010"],[13300010,"Rice Japan (5kg/bag)/Kome/Gạo Nhật - L80","Gói 5Kg","Nguyên liệu","Hàng khô",5,"10000001"],[13300014,"Flour Shiratamako (200g/pkt)/Bột làm bánh Mochi","Gói 200g","Nguyên liệu","Hàng khô",0.2,"00000001"],[13300057,"Bột ớt Ichimi Togarashi S&B (Gói 300g)","Gói","Nguyên liệu","Hàng khô",0.3,"10000001"],[13300060,"Flour Tapioca-Tai ky (1kg/pkt)/Bột năng Tài Ký","Gói 1Kg","Nguyên liệu","Hàng khô",1,"00000001"],[13300074,"Gạo Nijikomachi","Kg","Nguyên liệu","Hàng khô",1,"00100000"],[13300086,"Bột Tempura","kg","Nguyên liệu","Hàng khô",1,"11110011"],[13300102,"Bột chiên giòn Beksul","Gói 1kg","Nguyên liệu","Hàng khô",1,"10000000"],[13300103,"Bột chiên giòn Ajiquick","Gói 150g","Nguyên liệu","Hàng khô",0.15,"11000000"],[13300107,"Bột Trộn Sẵn Pre-mix Xe Đạp 1kg x 20 gói","kg","Nguyên liệu","Hàng khô",1,"11000000"],[14100108,"Veg Amazu shoga/Gừng hồng","kg","Nguyên liệu","Hàng mát",1,"00000001"],[14100187,"Gừng cắt sợi chế biến ( đỏ ) Gói 1.5kg","Gói 1.5Kg","Nguyên liệu","Hàng khô",1.5,"10000001"],[15100063,"Trà atiso","L","Nguyên liệu","Hàng mát",1,"10000000"],[15100070,"Trà đào","L","Nguyên liệu","Hàng mát",1,"10000000"],[15400072,"Bánh Mochi Socola ( 40 cái/thùng )","cái","Nguyên liệu","Hàng đông",0.01,"10010000"],[15400073,"Bánh Mochi Matcha ( 40 cái/thùng )","cái","Nguyên liệu","Hàng đông",0.01,"11010010"],[15400121,"BÁNH TUYẾT ĐẠI PHÚC VỊ VIỆT QUẤT","cái","Nguyên liệu","Hàng đông",0.01,"11010010"],[15400122,"BÁNH TUYẾT ĐẠI PHÚC PHÚC BỒN TỬ","cái","Nguyên liệu","Hàng đông",0.01,"00010010"],[16000085,"Frt Jelly 3in1 (30pc/24g/pkt)/Thạch rau câu","Gói","Nguyên liệu","Hàng khô",0.72,"00000001"],[16000147,"Măng chế biến (Gói 1kg) - Seasoned Bamboo Shoot (Menma J)","Gói 1Kg","Nguyên liệu","Hàng mát",1,"00000011"],[16000218,"Bánh xếp Gyoza Gà và Heo 570g (30pcs)","Gói","Nguyên liệu","Hàng đông",0.57,"10000000"],[16000238,"Nấm mèo khô cắt sợi","kg","Nguyên liệu","Hàng khô",1,"11000001"],[16000255,"Bánh nhân bạch tuộc Takoyaki (40 viên x 30g) 1.2kg","Gói","Nguyên liệu","Hàng đông",1.2,"10000001"],[16000257,"Khoai tây múi cau tẩm vị","kg","Nguyên liệu","Hàng đông",1,"11000010"],[21000197,"VP Korean cabbage/Kim chi cải thảo - Văn phòng","Kg","Rau củ chế biến","Hàng mát",1,"11110011"],[21000301,"VP Bó xôi luộc","kg","Rau củ chế biến","Hàng đông",1,"11010011"],[21000144,"CK Beef Outside Skirt-Harami/Diềm thăn bò","Kg","SC Thịt","Hàng đông",1,"00010000"],[21000148,"CK Beef Short Plate-US/Ba chỉ bò Mỹ - Nướng","Kg","SC Thịt","Hàng đông",1,"00010000"],[21000152,"CK Beef Wagyu Sirloin","Kg","SC Thịt","Hàng đông",1,"01000000"],[21000156,"CK Beef Wagyu Sirloin (100g)","Miếng","SC Thịt","Hàng đông",0.1,"00010000"],[21000159,"CK Beef Tounge-DM/Lưỡi bò Đan Mạch","Kg","SC Thịt","Hàng đông",1,"00010000"],[21000160,"CK Beef Kobe Sirloin - nướng","Kg","SC Thịt","Hàng đông",1,"00010000"],[21000174,"CK Wagyu CHUCKSHORTRIB - Nướng","Kg","SC Thịt","Hàng đông",1,"00010000"],[21000179,"CK Pork Belly without skin/Ba chỉ heo không da - Nướng","Kg","SC Thịt","Hàng đông",1,"00010000"],[21000185,"CK Beef Wagyu Sirloin Lẩu 500g","Khay500G","SC Thịt","Hàng đông",0.5,"01110000"],[21000229,"CK Sườn bò excell Canada","Kg","SC Thịt","Hàng đông",1,"00010000"],[21000254,"CK Fish Tuna/Cá ngừ VN","kg","SC Thịt","Hàng đông",1,"01110000"],[21000265,"CK Top Blade- Thịt lõi vai bò không xương U.S (200g/miếng)","Miếng","SC Thịt","Hàng đông",0.2,"01000000"],[21000299,"VP Gà Karaage chế biến","Kg","SC Thịt","Hàng đông",1,"11100011"],[21000324,"Beef Date Đầu lưỡi hầm - Văn phòng","Kg","SC Thịt","Hàng đông",1,"01000000"],[21000327,"CK Beef Wagyu Sirloin (60g/miếng)","Miếng","SC Thịt","Hàng đông",0.06,"00011000"],[21000464,"CK Beef Short rib-US Bone-in (1cm)/Sườn bò Mỹ có xương","kg","SC Thịt","Hàng đông",1,"00010000"],[21000473,"CK Sườn non bò Mỹ có xương 5cm","kg","SC Thịt","Hàng đông",1,"00010000"],[21000474,"CK Cổ bò Mỹ - Lẩu","kg","SC Thịt","Hàng đông",1,"01110000"],[21000475,"CK Cổ bò Mỹ - Nướng","kg","SC Thịt","Hàng đông",1,"00010000"],[21000483,"CK Dẻ sườn bò Canada","kg","SC Thịt","Hàng đông",1,"00010000"],[21000490,"CK Sườn non bò Mỹ không xương","Kg","SC Thịt","Hàng đông",1,"00010000"],[21000493,"CK Beef Kobe Tenderloin 120g/phần","Phần","SC Thịt","Hàng đông",1,"00010000"],[21000494,"CK Beef Wagyu Sirloin nướng KSY","kg","SC Thịt","Hàng đông",1,"00010000"],[21000628,"CK Cốt lếch heo không xương (100g/miếng)","Miếng","SC Thịt","Hàng đông",0.1,"00000011"],[21000682,"CK Tôm thẻ đông size 50-60 con/kg","kg","SC Thịt","Hàng đông",1,"11000000"],[21000685,"CK Đùi gà tỏi ướp gia vị 5 cái/gói","Gói","SC Thịt","Hàng đông",0.7,"11000000"],[21000689,"CK Ba chỉ bò ghép","kg","SC Thịt","Hàng đông",1,"10000000"],[21000194,"VP Giấm Sushi - Văn phòng","L","Tổ Sốt / Soup","Hàng mát",1,"01110010"],[21000195,"VP Karai chấm - Văn phòng","Kg","Tổ Sốt / Soup","Hàng mát",1,"11010011"],[21000202,"VP Shouyu/Nước tương chấm sushi","L","Tổ Sốt / Soup","Hàng mát",1,"01110000"],[21000203,"VP Sốt Gyudon - Văn phòng","L","Tổ Sốt / Soup","Hàng mát",1,"11110001"],[21000208,"VP Sốt ướp bò - Văn phòng","Kg","Tổ Sốt / Soup","Hàng mát",1,"10000000"],[21000213,"Sauce Udon","Gói 1Kg","Tổ Sốt / Soup","Hàng mát",1,"00010000"],[21000295,"VP Soup gà","L","Tổ Sốt / Soup","Hàng đông",1,"01000011"],[21000349,"Sauce Kochizang-spicy/Sốt cay Kochizang","kg","Tổ Sốt / Soup","Hàng mát",1,"00010000"],[21000376,"VP Sauce Tsuke Tare","L","Tổ Sốt / Soup","Hàng mát",1,"00010000"],[21000377,"VP Sauce Akami Tare","L","Tổ Sốt / Soup","Hàng mát",1,"00010000"],[21000378,"VP Sauce Momi Tare","L","Tổ Sốt / Soup","Hàng mát",1,"00010000"],[21000379,"VP Sauce Drosu Tare","L","Tổ Sốt / Soup","Hàng mát",1,"00010000"],[21000380,"Vp Sauce Tokyo Tower","L","Tổ Sốt / Soup","Hàng mát",1,"00010000"],[21000421,"Sốt trộn cay VP","kg","Tổ Sốt / Soup","Hàng mát",1,"11000000"],[21000454,"CK Vin Suehiro Su Mizkan/ Giấm suehiro","L","Tổ Sốt / Soup","Hàng mát",1,"11000011"],[21000460,"Nước dùng bò (1Kg/Bịch)","kg","Tổ Sốt / Soup","Hàng đông",1,"00010000"],[21000484,"VP Sauce Harami","kg","Tổ Sốt / Soup","Hàng mát",1,"00010000"],[21000502,"CK Sốt Kimchi mới","kg","Tổ Sốt / Soup","Hàng mát",1,"11000000"],[21000508,"CK Rayu dầu ớt (tokuseei jikasei rayu)","L","Tổ Sốt / Soup","Hàng mát",1,"11000000"],[21000510,"CK Udon tsuyu","L","Tổ Sốt / Soup","Hàng mát",1,"11000000"],[21000524,"CK Somi Demi Glass Sauce","kg","Tổ Sốt / Soup","Hàng mát",1,"01110000"],[21000541,"CK Nước cốt xương heo","kg","Tổ Sốt / Soup","Hàng đông",1,"11000010"],[21000615,"VP Sốt Ponzu - Văn phòng","L","Tổ Sốt / Soup","Hàng mát",1,"01110000"],[21000652,"CK Sốt udon KUR mix","L","Tổ Sốt / Soup","Hàng mát",1,"11110000"],[21000653,"CK Sốt shoyu KUR","L","Tổ Sốt / Soup","Hàng mát",1,"11000000"],[21000673,"CK Shoyu ramen soup KUR","L","Tổ Sốt / Soup","Hàng mát",1,"11000000"],[21000686,"CK Sốt Taru Taru","kg","Tổ Sốt / Soup","Hàng mát",1,"01000000"],[21000691,"CK Nước tương ngâm trứng","L","Tổ Sốt / Soup","Hàng mát",1,"01000000"],[21000693,"CK Shio Ramen Soup Base","L","Tổ Sốt / Soup","Hàng mát",1,"00000011"],[53000002,"Hộp chữ nhật Kraft - nắp trong K198","Bộ","VDTH","Hàng CCDC",0.05,"11110011"],[53000003,"Chén giấy 1202 360ml nắp Pet 98","Bộ","VDTH","Hàng CCDC",0.08,"10110000"],[53000005,"Take away - Bịch đựng Kohaku udon ramen 3kg","kg","VDTH","Hàng CCDC",1,"11010010"],[53000008,"Fb Plastic bag for glass paper/Túi chữ T","kg","VDTH","Hàng CCDC",1,"10000000"],[53000012,"Gfb Plastick box-Flan/Hộp bánh Flan ( 45ml)","Cái","VDTH","Hàng CCDC",0.02,"11110010"],[53000014,"Thố giấy 1000ml + nắp 150PP","Bộ","VDTH","Hàng CCDC",0.06,"01110000"],[53000017,"nắp ly","Cái","VDTH","Hàng CCDC",0.01,"11010000"],[53000018,"Take away - Bịch đựng Kohaku udon ramen 5kg","kg","VDTH","Hàng CCDC",1,"11010010"],[53000023,"Hộp giấy Chữ nhật Kraft  - nắp trong K2216","Bộ","VDTH","Hàng CCDC",0.08,"00110000"],[53000029,"Ly giấy 14oz, ly trắng","Cái","VDTH","Hàng CCDC",0.1,"11010000"],[53000035,"Decal nhiệt ( tem dán)","Cuộn","VDTH","Hàng CCDC",0.3,"10000001"],[53000054,"Khay tròn P126","cái","VDTH","Hàng CCDC",0.1,"11000000"],[53000063,"Hộp nhựa tròn đen 1000ml","Cái","VDTH","Hàng CCDC",0.01,"10000011"],[53000065,"Túi zip bạc 1 mặt trong 15x22cm","kg","VDTH","Hàng CCDC",1,"11000011"],[54000001,"Acoquat - Cồn nước 5L/cal","Bình 5L","VDTH","Hàng CCDC",5,"11000000"],[54000006,"Nước tẩy rửa - Sani DC (5L/bình) (Lau sàn)","Bình 5L","VDTH","Hàng CCDC",5,"00000001"],[54000009,"Sani-Rinse - Hóa chấy sấy khô dùng cho máy rửa chén 20L","Thùng 20L","VDTH","Hàng CCDC",20,"10000000"],[54000010,"Nước rửa tay lifeboy","Chai","VDTH","Hàng CCDC",0.3,"11000000"],[54000014,"Nước rửa chén (Crystal clean)","L","VDTH","Hàng CCDC",1,"11000000"],[54000016,"Nước rửa chén (9.5kg/bình)","Bình","VDTH","Hàng CCDC",9.5,"11000001"],[54000052,"Bột tẩy trắng Oxygen Bleach 1kg","kg","VDTH","Hàng CCDC",1,"00100000"],[55000001,"Bình gas mini","Bình","VDTH","Hàng CCDC",1,"00000001"],[56000002,"Bao xốp trắng loại 5kg","kg","VDTH","Hàng CCDC",1,"01000000"],[56000003,"Bao tay nilon","kg","VDTH","Hàng CCDC",1,"10000000"],[56000004,"Fb Garbage bag (0.9x1.2m/Bao rác đen dẻo","kg","VDTH","Hàng CCDC",1,"01000001"],[56000005,"Fb Garbage bag-roll/Bao rác cuộn 3 màu","kg","VDTH","Hàng CCDC",1,"10000000"],[56000006,"Màng bọc thực phẩm 30cm","Cuộn","VDTH","Hàng CCDC",1,"11000000"],[56000010,"Bộ muỗng + đũa +khăn giấy mang về","Bộ","VDTH","Hàng CCDC",0.02,"11110011"],[56000011,"Fb Platemat-paper/Giấy lót bàn (26x36.5cm) Kohaku","Tờ","VDTH","Hàng CCDC",0.01,"00010000"],[56000012,"khăn lạnh Kohaku","Cái","VDTH","Hàng CCDC",0.05,"01110000"],[56000013,"Bao tăm không logo","Bịch 1000 Cái","VDTH","Hàng CCDC",0.005,"01000000"],[56000018,"Fb Bamboo chopsticks/Đũa tre","Đôi","VDTH","Hàng CCDC",0.05,"00010000"],[56000025,"Bao đũa Kohaku","Tờ","VDTH","Hàng CCDC",0.01,"00010000"],[56000040,"GĂNG TAY CAO SU Y TẾ NITRILE KHÔNG BỘT, MÀU ĐEN","Hộp","VDTH","Hàng CCDC",0.3,"01000000"],[56000071,"Giấy cuộn vệ sinh","Cuộn","VDTH","Hàng CCDC",0.1,"00000001"],[56000072,"Túi zip 10x15cm","kg","VDTH","Hàng CCDC",1,"01000010"],[56000075,"Thùng Xốp NP100","cái","VDTH","Hàng CCDC",0.3,"11000000"],[56000084,"Khăn giấy rút vuông A08PU1 (bịch/550 tờ)","Bịch","VDTH","Hàng CCDC",0.3,"11000001"],[56000107,"Decal nhiệt ( tem dán) 30x150","Cuộn","VDTH","Hàng CCDC",1,"10000000"],[56000160,"Túi zip chỉ đỏ 5x7cm","KG","VDTH","Hàng CCDC",1,"00000010"],[56000167,"Ống hút trắng Bịch 500g","Bịch","VDTH","Hàng CCDC",0.5,"01000001"],[58000008,"Mút rửa chén","Cái","VDTH","Hàng CCDC",0.1,"11000000"],[58000011,"Bao tay rửa chén L","Đôi","VDTH","Hàng CCDC",0.1,"01000000"],[58000014,"Khăn lau thực phẩm 20*30","Thùng","VDTH","Hàng CCDC",2,"01111100"],[59000001,"Giấy in bill","Cuộn","VDTH","Hàng CCDC",0.2,"11000001"]];
+
+(function () {
+  const dlg = $('maDlg');
+  const cols = ['Mã vật tư', 'Tên vật tư', 'ĐVT', 'Phân tổ', 'Nhóm hàng', 'Quy đổi ra ĐVT Kg', ...MA_BRANDS];
+  const hr = $('maHead').insertRow();
+  cols.forEach(c => { const th = document.createElement('th'); th.textContent = c; hr.appendChild(th); });
+  const uniq = i => [...new Set(MA_DATA.map(r => r[i]))].sort((a, b) => String(a).localeCompare(String(b), 'vi'));
+  uniq(4).forEach(v => $('maNhom').appendChild(new Option(v, v)));
+  uniq(3).forEach(v => $('maTo').appendChild(new Option(v, v)));
+  MA_BRANDS.forEach((b, i) => $('maBrand').appendChild(new Option(b, String(i))));
+  const noAccent = s => String(s).normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').toLowerCase();
+  function render() {
+    const q = noAccent($('maQ').value.trim()), n = $('maNhom').value, t = $('maTo').value, b = $('maBrand').value;
+    const list = MA_DATA.filter(r => (!n || r[4] === n) && (!t || r[3] === t) && (b === '' || r[6][Number(b)] === '1') &&
+                                    (!q || noAccent(r[0] + ' ' + r[1]).includes(q)));
+    const tb = $('maBody'); tb.replaceChildren();
+    list.forEach(r => {
+      const tr = tb.insertRow();
+      [r[0], r[1], r[2], r[3], r[4]].forEach(v => { tr.insertCell().textContent = v; });
+      const q6 = tr.insertCell(); q6.textContent = r[5]; q6.className = 'n';
+      for (const ch of r[6]) { const td = tr.insertCell(); td.textContent = ch === '1' ? '✓' : ''; td.className = 'c'; }
+    });
+    $('maCnt').textContent = `(${list.length} / ${MA_DATA.length} mã)`;
+  }
+  ['maQ'].forEach(i => $(i).addEventListener('input', render));
+  ['maNhom', 'maTo', 'maBrand'].forEach(i => $(i).addEventListener('change', render));
+  $('btnMa').onclick = () => { render(); dlg.showModal(); if (window.SOLAuth) SOLAuth.log('Xem popup', 'Vận hành / Dự đoán SL đặt hàng CK / Mã đặt hàng CK'); };
+  $('maClose').onclick = () => dlg.close();
+  dlg.addEventListener('click', e => { if (e.target === dlg) dlg.close(); });
+})();
+
 /* ====================== Quy tắc (nút "i") ====================== */
 const RULES = [
   'Phải chọn Brand trước. Danh sách Nhà hàng chỉ nạp các nhà hàng thuộc brand đã chọn. Nút Tìm chỉ bấm được khi đã chọn đủ Brand và Nhà hàng.',
@@ -393,9 +609,18 @@ const RULES = [
   `Lịch đặt hàng được cài sẵn trong trang theo file lịch đặt hàng CK (áp dụng cho đơn giao từ ${SCHEDULE_VALID_FROM}). Khi lịch đổi thì phải cập nhật lại trang.`,
   'Brand "Khu vực Đà Nẵng" và "Khu vực Hà Nội": file lịch chỉ có lịch theo khu vực, không liệt kê từng nhà hàng, nên chọn mục "Toàn khu vực".',
   'Brand KRU, KSY được ghi theo mã nhà hàng (file lịch ghi KUR, KYS). Tên nhà hàng giữ đúng như trong file lịch.',
-  'Thanh tiến trình có 5 bước: (1) Chi tiết BH tháng trước, (2) Danh sách mã NVL dùng order CK, (3) Danh sách BOM, (4) Chi tiết kiểm kê ngày hôm trước, (5) Dự đoán đặt hàng. Bấm Tìm thì thanh chạy từ bước 1 đến bước 5, có kết quả thì dừng ở bước 5.',
-  'Nếu chưa có dữ liệu dự đoán (API chưa cấu hình), bước 5 hiện màu vàng và lưới để trống; nếu lỗi thì bước 5 hiện màu đỏ.',
-  'Download CSV tải đúng các dòng đang hiển thị trên lưới.'
+  'Thanh tiến trình có 6 bước: (1) Chi tiết BH tháng trước, (2) Danh sách mã NVL dùng order CK, (3) Danh sách BOM, (4) Chi tiết kiểm kê ngày hôm trước, (5) Hàng đang vận chuyển, (6) Dự đoán đặt hàng. Bấm Tìm thì thanh chạy từ bước 1 đến bước 6, có kết quả thì dừng ở bước 6.',
+  'Cách tính (hiện chỉ brand KRU có BOM): với mỗi thứ trong tuần, nhu cầu của từng món = tổng SL bán của thứ đó trong tháng trước / số lần thứ đó xuất hiện trong tháng (nên thứ 6, thứ 7, CN bán nhiều thì nhu cầu cao hơn), rồi nhân định mức BOM. Cột Nhu cầu/ngày là trung bình 7 thứ. Món tặng và mọi món bán đều tính. BTP được bung thêm tối đa 3 tầng. Chỉ giữ các vật tư nằm trong danh mục "Mã đặt hàng CK" của brand KRU.',
+  'Kỳ đặt: lấy ngày order gần nhất theo lịch của nhà hàng; hôm nay là ngày order thì vẫn tính cho hôm nay kể cả sau 14h (kết quả chỉ để nhà hàng tham khảo trước khi đặt, có ghi chú). Các vật tư cùng ngày order và cùng tuyến thuộc cùng một đợt đặt, lưới sắp xếp theo ngày order. Nhu cầu cả kỳ = cộng nhu cầu của đúng các thứ sử dụng của kỳ đó (ví dụ dùng T4, T5 thì cộng nhu cầu thứ 4 và thứ 5). Hàng CCDC dùng 2 tuần = 14 ngày.',
+  'Tồn: lấy số lượng kiểm kê thực tế (phiếu "Đã xử lý") của D-1, không có thì D-2; mỗi ngày thường có 1 phiếu, nếu có nhiều phiếu thì cộng dồn theo mã vật tư. Tồn dự kiến lúc dùng = tồn kiểm kê trừ phần tiêu thụ (theo đúng thứ từng ngày) từ ngày kiểm kê đến hết ngày trước ngày bắt đầu dùng (không âm). SL đề xuất đặt = nhu cầu cả kỳ trừ tồn dự kiến (không âm), làm tròn lên 2 số lẻ.',
+  'Mã thay thế cho nhau (cùng một nguyên liệu, khai báo trong ALT_GROUPS: tôm nobashi 15G / 20G; Bột Tempura / Flour Tempura): trong một món (và trong công thức một BTP) chỉ lấy mã có ngày hiệu lực mới nhất, không quá hôm nay. Các dòng còn lại không xét ngày hiệu lực.',
+  'Dòng BOM ghi "thay thế" luôn được tính (thường là mã CK thay cho nguyên liệu cũ): trong BOM, vật tư nào nằm trong danh mục mã đặt hàng CK thì được giữ.',
+  'Tên nhà hàng trên trang lấy theo database. File lịch đặt hàng dùng tên khác cho vài nhà hàng, nên khi tra lịch đổi về tên trong file lịch (KRU20-PXL2 là KRU10-PXL2, KRU15-VP6 là KRU13-VP6, KRU14-PVT là KRU12-PVT, KSY3-LTQ7 là KSY3-LOTTE; KSY3 chưa xác nhận).',
+  'Kết quả là số đề xuất tham khảo, nhà hàng vẫn cần kiểm tra trước khi đặt. Hàng đang vận chuyển (CK đã xuất nhưng nhà hàng chưa nhập kho, làm tăng tồn) chưa có nguồn dữ liệu nên đang coi bằng 0; khi có nguồn sẽ cộng vào tồn dự kiến. Chưa xét: hệ số tăng trưởng, tồn an toàn, quy cách đóng gói, hàng Sốt taru taru, tuần 1 và tuần 3 của hàng CCDC.',
+  'Hai cột quy đổi để kiểm tra dữ liệu: "Quy đổi ra ĐVT Kg" lấy từ danh mục mã đặt hàng CK (1 ĐVT bằng bao nhiêu Kg) và "SL đề xuất đặt quy ra Kg" = SL đề xuất x hệ số đó. Chưa dùng hệ số này để tính, chỉ để đối chiếu.',
+  'Bước 5 (Hàng đang vận chuyển) hiện màu đỏ khi thanh chạy tới vì chưa có dữ liệu. Bước 6 hiện màu vàng khi chưa tính được (API chưa cấu hình, brand chưa có BOM), màu đỏ khi lỗi.',
+  'Download CSV tải đúng các dòng đang hiển thị trên lưới.',
+  'Nút "Mã đặt hàng CK" mở bảng danh mục mã vật tư đặt từ CK (cài sẵn trong trang theo file Excel), có lọc theo nhóm hàng, phân tổ, brand và tìm theo mã hoặc tên.'
 ];
 for (const t of RULES) { const li = document.createElement('li'); li.textContent = t; $('rulesList').appendChild(li); }
 $('infoBtn').onclick = () => $('rules').showModal();

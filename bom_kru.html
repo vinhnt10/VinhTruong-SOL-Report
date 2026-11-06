@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BOM KRU</title>
+<meta name="robots" content="noindex,nofollow">
+<style>
+  :root { --bg:#f7f8fa; --card:#fff; --line:#e3e6eb; --fg:#1b1f29; --muted:#6a7285; --accent:#2f5bea; --warn:#b45309; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:system-ui,-apple-system,"Segoe UI",sans-serif; background:var(--bg); color:var(--fg); }
+  main { height:100vh; display:flex; flex-direction:column; padding:16px 20px; gap:12px; }
+  .top { display:flex; align-items:baseline; gap:16px; flex-wrap:wrap; }
+  .back { font-size:13px; color:var(--accent); text-decoration:none; }
+  h1 { font-size:20px; margin:0; }
+  .sub { font-size:13px; color:var(--muted); }
+  .tabs { display:flex; gap:4px; border-bottom:1px solid var(--line); flex-wrap:wrap; }
+  .tab { font:inherit; font-size:14px; padding:8px 16px; border:1px solid transparent; border-bottom:0; border-radius:8px 8px 0 0; background:none; color:var(--muted); cursor:pointer; margin-bottom:-1px; }
+  .tab[aria-selected="true"] { background:var(--card); border-color:var(--line); color:var(--accent); font-weight:600; }
+  .bar { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  input, select, button { font:inherit; padding:7px 11px; border:1px solid var(--line); border-radius:8px; background:#fff; color:var(--fg); }
+  button { cursor:pointer; }
+  #cnt { margin-left:auto; font-size:13px; color:var(--muted); }
+  .wrap { flex:1; min-height:120px; overflow:auto; background:var(--card); border:1px solid var(--line); border-radius:10px; }
+  table { border-collapse:separate; border-spacing:0; width:100%; }
+  th, td { padding:7px 12px; font-size:13px; border-bottom:1px solid var(--line); text-align:left; }
+  th { position:sticky; top:0; background:#f1f3f7; z-index:1; white-space:nowrap; }
+  td.n { text-align:right; font-variant-numeric:tabular-nums; }
+  td.nw { white-space:nowrap; }
+  tr.sub td { background:#fffbeb; }
+  .note { font-size:12.5px; color:var(--muted); line-height:1.5; }
+  .note b { color:var(--warn); }
+</style>
+</head>
+<body>
+<main>
+  <div class="top"><h1>BOM KRU</h1>
+    <span class="sub">Brand KRU (không gồm KRU nhượng quyền) · BOM T10/2026</span></div>
+  <div class="tabs" role="tablist" id="tabs"></div>
+  <div class="bar">
+    <input id="q" placeholder="Tìm mã hoặc tên..." size="32">
+    <select id="sel" hidden></select>
+    <label class="note" id="subWrap" hidden><input type="checkbox" id="onlySub"> Chỉ dòng "thay thế"</label>
+    <button id="csv">Download CSV</button>
+    <span id="cnt"></span>
+  </div>
+  <p class="note" id="info" style="margin:0"></p>
+  <div class="wrap"><table><thead id="head"></thead><tbody id="body"></tbody></table></div>
+</main>
+
+<script src="depts.js"></script>
+<script src="auth.js"></script>
+<script src="bom-kru-data.js"></script>
+<script>
+// Trang đọc dữ liệu nội bộ, không gắn vào menu nào. Chỉ mã vào được mục Vinh Trương (quản trị) mới mở được.
+if (SOLAuth.guard('vinh-truong')) SOLAuth.log('Mở trang', 'Dữ liệu / BOM KRU');
+const $ = id => document.getElementById(id);
+
+/* =====================================================================
+   DỮ LIỆU HARDCODE từ file "Bom KRU T10" (brand KRU, KHÔNG phải KRU nhượng quyền).
+   4 sheet: Menu, Bom (món -> vật tư), BTP (bán thành phẩm -> vật tư), NVL (danh mục vật tư).
+   Dòng dữ liệu giữ nguyên như file gốc, không chỉnh sửa.
+   ===================================================================== */
+
+const TABS = [
+  { name: 'BOM món (' + BOM.length + ')', cols: ['Mã sản phẩm','Tên sản phẩm','Mã vật tư','Tên vật tư','ĐVT','Số lượng','Hiệu lực từ','Đến ngày','Diễn giải'], rows: BOM, num: [5], nowrap: [0,2,4,6,7], group: 1, hasSub: true,
+    info: 'Mỗi món gồm nhiều dòng vật tư. Dòng nền vàng là dòng có ghi chú trong cột Diễn giải (ví dụ "thay thế"): đây là vật tư thay thế hoặc phương án khác, KHÔNG được cộng chung với vật tư chính khi tính nhu cầu.' },
+  { name: 'Menu (' + MENU.length + ')', cols: ['Mã món','Tên món','Tên hiển thị'], rows: MENU, num: [], nowrap: [0] },
+  { name: 'BTP (' + BTP.length + ')', cols: ['Mã BTP','Tên BTP','Mã vật tư','Tên vật tư','ĐVT','Số lượng','Hiệu lực từ','Đến ngày','Diễn giải'], rows: BTP, num: [5], nowrap: [0,2,4,6,7], group: 1, hasSub: true,
+    info: 'Bán thành phẩm (BTP) cũng có công thức riêng. Nhiều vật tư trong BOM món là BTP, nên cần bung thêm một tầng từ sheet này để ra NVL gốc.' },
+  { name: 'NVL (' + NVL.length + ')', cols: ['Mã vật tư','Tên vật tư','ĐVT'], rows: NVL, num: [], nowrap: [0] }
+];
+
+const noAccent = s => String(s).normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').toLowerCase();
+let cur = 0, shown = [];
+
+function setTab(i) {
+  cur = i; const t = TABS[i];
+  document.querySelectorAll('.tab').forEach((b, k) => b.setAttribute('aria-selected', String(k === i)));
+  $('head').replaceChildren(); const hr = $('head').insertRow();
+  t.cols.forEach(c => { const th = document.createElement('th'); th.textContent = c; hr.appendChild(th); });
+  $('q').value = ''; $('onlySub').checked = false; $('subWrap').hidden = !t.hasSub;
+  const sel = $('sel');
+  if (t.group != null) {   // lọc theo sản phẩm
+    const seen = new Map(); t.rows.forEach(r => { if (!seen.has(r[0])) seen.set(r[0], r[1]); });
+    sel.replaceChildren(new Option('Mọi sản phẩm', ''), ...[...seen].map(([k, v]) => new Option(k + ' - ' + v, k)));
+    sel.hidden = false;
+  } else sel.hidden = true;
+  $('info').textContent = t.info || '';
+  render();
+}
+function render() {
+  const t = TABS[cur], q = noAccent($('q').value.trim()), g = $('sel').value, only = $('onlySub').checked;
+  shown = t.rows.filter(r => (!q || noAccent(r.join(' ')).includes(q)) && (t.group == null || !g || r[0] === g) && (!only || (t.hasSub && r[8])));
+  const tb = $('body'); tb.replaceChildren();
+  shown.forEach(r => {
+    const tr = tb.insertRow(); if (t.hasSub && r[8]) tr.className = 'sub';
+    r.forEach((v, i) => { const td = tr.insertCell(); td.textContent = v === '' ? '' : v; if (t.num.includes(i)) td.className = 'n'; else if (t.nowrap.includes(i)) td.className = 'nw'; });
+  });
+  $('cnt').textContent = shown.length.toLocaleString('vi-VN') + ' / ' + t.rows.length.toLocaleString('vi-VN') + ' dòng';
+}
+TABS.forEach((t, i) => { const b = document.createElement('button'); b.className = 'tab'; b.setAttribute('role', 'tab'); b.textContent = t.name; b.onclick = () => setTab(i); $('tabs').appendChild(b); });
+$('q').oninput = render; $('sel').onchange = render; $('onlySub').onchange = render;
+
+$('csv').onclick = () => {
+  if (!shown.length) return;
+  const t = TABS[cur];
+  const esc = (v, i) => { let s = String(v ?? ''); if (typeof v === 'string' && /^[=+\-@]/.test(s)) s = "'" + s; return '"' + s.replace(/"/g, '""') + '"'; };
+  const csv = [t.cols.map(esc).join(','), ...shown.map(r => r.map(esc).join(','))].join('\r\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' }));
+  a.download = 'bom_kru_' + t.name.replace(/\s*\(\d+\)/, '').toLowerCase().replace(/\W+/g, '_') + '.csv'; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  SOLAuth.log('Download', 'Dữ liệu / BOM KRU / ' + t.name);
+};
+setTab(0);
+</script>
+</body>
+</html>
