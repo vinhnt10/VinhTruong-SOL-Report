@@ -80,7 +80,9 @@
   .wrap.empty { display:grid; place-items:center; color:var(--muted); font-size:14px; padding:20px; text-align:center; }
   table.grid { border-collapse:separate; border-spacing:0; width:100%; }
   table.grid th, table.grid td { padding:8px 12px; font-size:13px; border-bottom:1px solid var(--line); text-align:left; white-space:nowrap; }
-  table.grid th { position:sticky; top:0; background:#f1f3f7; z-index:2; }
+  table.grid th .hn { font-weight:700; white-space:nowrap; }
+  table.grid th .hs { font-weight:400; font-size:11px; color:var(--muted); white-space:normal; min-width:130px; max-width:210px; line-height:1.35; margin-top:2px; }
+  table.grid th { vertical-align:top; position:sticky; top:0; background:#f1f3f7; z-index:2; }
   table.grid td.num { text-align:right; font-variant-numeric: tabular-nums; }
   dialog.big { width:min(1250px, calc(100% - 24px)); max-height:92vh; padding:16px 18px; }
   .mafilters { display:flex; gap:8px; flex-wrap:wrap; margin:6px 0 10px; }
@@ -456,26 +458,28 @@ function compute(api, branch, incSub) {
     if (nhom === 'Hàng CCDC') rk = pick('ccdcT2', 'ccdcT3');
     else if (nhom === 'Hàng đông') { rk = pick('matkhodong'); if (!rk) { rk = pick('matkho'); if (rk) note.push('Hàng đông: dùng lịch hàng mát - khô'); } }
     else rk = pick('matkhodong', 'matkho');
-    if (!rk) { push({ ma_nvl: vt, ten_nvl: m[1], dvt: m[2], nhom_hang: nhom, nhu_cau_ngay: Math.round(avg * 1000) / 1000, so_ngay_dung: '', nhu_cau_ky: '', ton_kiem_ke: stock.get(vt) ?? 0, hang_van_chuyen: transit.get(vt) || 0,
-                         ton_du_kien: '', sl_du_doan_dat: '', quy_doi_kg: m[5], sl_dat_quy_kg: '', ngay_order: '', ngay_giao: '', ghi_chu: 'Chưa có lịch đặt hàng cho nhà hàng này' }, null); return; }
+    const up = x => Math.ceil(Math.max(0, x) - 1e-9) + 0;                        // làm tròn lên số nguyên
+    const c8 = up(stock.get(vt) ?? 0), c9 = up(transit.get(vt) || 0);
+    if (!rk) { push({ ma_nvl: vt, ten_nvl: m[1], dvt: m[2], nhom_hang: nhom, nhu_cau_ngay: up(avg), so_ngay_dung: '', nhu_cau_ky: '', ton_kiem_ke: c8, hang_van_chuyen: c9,
+                      tieu_thu_cho: '', ton_du_kien: '', sl_du_doan_dat: '', quy_doi_kg: m[5], sl_dat_quy_kg: '', ngay_order: '', ngay_giao: '', ghi_chu: 'Chưa có lịch đặt hàng cho nhà hàng này' }, null); return; }
     const sl = nextSlot(rk, now);
     if (ROUTES[rk].rows[0].note) note.push(ROUTES[rk].rows[0].note + ' (trang chưa xét tuần)');
-    const has = stock.has(vt), ton = stock.get(vt) ?? 0;
+    const has = stock.has(vt);
     let used = 0;                                                                // tiêu thụ từ ngày kiểm kê đến hết ngày trước ngày bắt đầu dùng, theo đúng thứ của từng ngày
     if (sd) for (let d = sd; d < sl.fu; d = addDays(d, 1)) used += pdw[d.getDay()];
-    const tr = transit.get(vt) || 0;
-    const proj = Math.max(0, ton + tr - used);
     let need = 0;                                                                // nhu cầu các ngày sử dụng, theo đúng thứ của từng ngày
     if (sl.useWds) sl.useWds.forEach(w => { need += pdw[w]; });
     else for (let i = 0; i < sl.days; i++) need += pdw[(sl.fu.getDay() + i) % 7];
     if (sd && !has) note.push('Không có trong kiểm kê (coi tồn = 0)');
     if (late && sl.od.getTime() === dayOnly(now).getTime()) note.push('Đã quá 14h (hạn đặt), kết quả chỉ để tham khảo');
-    const dat = Math.ceil(Math.max(0, need - proj) * 100) / 100;
+    // Cột 11, 12, 14 tính trên số đã làm tròn nên cộng trừ trên lưới khớp từng cột
+    const c7 = up(need), c10 = up(used);
+    const c11 = Math.max(0, c8 + c9 - c10), c12 = Math.max(0, c7 - c11);
     push({ ma_nvl: vt, ten_nvl: m[1], dvt: m[2], nhom_hang: nhom,
-               nhu_cau_ngay: Math.round(avg * 1000) / 1000, so_ngay_dung: sl.days, nhu_cau_ky: Math.round(need * 100) / 100,
-               ton_kiem_ke: ton, hang_van_chuyen: tr, ton_du_kien: Math.round(proj * 100) / 100, sl_du_doan_dat: dat,
-               quy_doi_kg: m[5], sl_dat_quy_kg: Math.round(dat * Number(m[5] || 0) * 100) / 100,
-               ngay_order: fmtD(sl.od), ngay_giao: fmtD(sl.dd), ghi_chu: note.join('; ') }, sl.od);
+           nhu_cau_ngay: up(avg), so_ngay_dung: sl.days, nhu_cau_ky: c7,
+           ton_kiem_ke: c8, hang_van_chuyen: c9, tieu_thu_cho: c10, ton_du_kien: c11, sl_du_doan_dat: c12,
+           quy_doi_kg: m[5], sl_dat_quy_kg: up(c12 * Number(m[5] || 0)),
+           ngay_order: fmtD(sl.od), ngay_giao: fmtD(sl.dd), ghi_chu: note.join('; ') }, sl.od);
   });
   out.sort((a, b) => (a._od - b._od) || String(a.nhom_hang).localeCompare(b.nhom_hang, 'vi') || String(a.ten_nvl).localeCompare(b.ten_nvl, 'vi'));
   return { rows: out, warn, salesFrom: api.sales_from, salesTo: api.sales_to };
@@ -526,22 +530,43 @@ $('btn').onclick = async () => {
 };
 
 /* ====================== Data grid + download ====================== */
-const LABELS = {
-  ma_nvl: 'Mã vật tư', ten_nvl: 'Tên vật tư', dvt: 'ĐVT', nhom_hang: 'Nhóm hàng', nhu_cau_ngay: 'Nhu cầu/ngày', so_ngay_dung: 'Số ngày dùng',
-  nhu_cau_ky: 'Nhu cầu cả kỳ', ton_kiem_ke: 'Tồn kiểm kê', hang_van_chuyen: 'Hàng đang vận chuyển', ton_du_kien: 'Tồn dự kiến lúc dùng', sl_du_doan_dat: 'SL đề xuất đặt', quy_doi_kg: 'Quy đổi ra ĐVT Kg (1 ĐVT = ? Kg)', sl_dat_quy_kg: 'SL đề xuất đặt quy ra Kg',
-  ngay_order: 'Ngày order', ngay_giao: 'Ngày giao', ghi_chu: 'Ghi chú'
-};
-const label = c => LABELS[c] || c;
+// Các cột của lưới: [khoá, tên, cách tính]. Số thứ tự cột theo vị trí; cách tính tham chiếu số cột.
+const COLS = [
+  ['ma_nvl', 'Mã vật tư', 'Danh mục mã đặt hàng CK'],
+  ['ten_nvl', 'Tên vật tư', 'Danh mục mã đặt hàng CK'],
+  ['dvt', 'ĐVT', 'Danh mục mã đặt hàng CK'],
+  ['nhom_hang', 'Nhóm hàng', 'Danh mục mã đặt hàng CK'],
+  ['nhu_cau_ngay', 'Nhu cầu/ngày', 'Trung bình 7 thứ của (SL bán từng món theo thứ tháng trước / số lần thứ đó) x BOM. Chỉ tham khảo, không dùng tính tiếp'],
+  ['so_ngay_dung', 'Số ngày dùng', 'Theo lịch đặt hàng của tuyến'],
+  ['nhu_cau_ky', 'Nhu cầu cả kỳ', 'Cộng nhu cầu của đúng các thứ sử dụng (không phải cột 5 x cột 6)'],
+  ['ton_kiem_ke', 'Tồn kiểm kê', 'Số đếm thực tế phiếu kiểm kê D-1 (không có thì D-2), cộng các phiếu'],
+  ['hang_van_chuyen', 'Hàng đang vận chuyển', 'CK đã xuất, NH chưa nhập kho. Chưa có dữ liệu nên = 0'],
+  ['tieu_thu_cho', 'Tiêu thụ chờ', 'Cộng nhu cầu từ ngày kiểm kê đến hết ngày trước ngày bắt đầu dùng'],
+  ['ton_du_kien', 'Tồn dự kiến lúc dùng', '= cột 8 + cột 9 - cột 10 (không âm)'],
+  ['sl_du_doan_dat', 'SL đề xuất đặt', '= cột 7 - cột 11 (không âm)'],
+  ['quy_doi_kg', 'Quy đổi ra ĐVT Kg', 'Danh mục mã CK: 1 ĐVT = ? Kg (không làm tròn)'],
+  ['sl_dat_quy_kg', 'SL đề xuất đặt quy ra Kg', '= cột 12 x cột 13, làm tròn lên'],
+  ['ngay_order', 'Ngày order', 'Theo lịch đặt hàng của tuyến'],
+  ['ngay_giao', 'Ngày giao', 'Theo lịch đặt hàng của tuyến'],
+  ['ghi_chu', 'Ghi chú', 'Cảnh báo cho dòng này']
+];
+const colsOf = row => COLS.filter(c => c[0] in row);
+const label = c => { const k = COLS.findIndex(x => x[0] === c); return k < 0 ? c : (k + 1) + '. ' + COLS[k][1]; };
 const fmtNum = v => (typeof v === 'number') ? v.toLocaleString('vi-VN', { maximumFractionDigits: 3 }) : v;
 
 function renderGrid(data) {
   rows = data;
   const wrap = $('wrap');
   if (!rows.length) { wrap.className = 'wrap empty'; wrap.textContent = 'Không có dữ liệu'; setMsg('Không có dữ liệu'); return; }
-  const cols = Object.keys(rows[0]);
+  const cols = colsOf(rows[0]).map(c => c[0]);
   const t = document.createElement('table'); t.className = 'grid';
   const hr = t.createTHead().insertRow();
-  cols.forEach(c => { const th = document.createElement('th'); th.textContent = label(c); hr.appendChild(th); });
+  cols.forEach(c => {
+    const k = COLS.findIndex(x => x[0] === c), th = document.createElement('th');
+    const h = document.createElement('div'); h.className = 'hn'; h.textContent = (k + 1) + '. ' + COLS[k][1];
+    const d = document.createElement('div'); d.className = 'hs'; d.textContent = COLS[k][2];
+    th.append(h, d); hr.appendChild(th);
+  });
   const tb = t.createTBody();
   rows.forEach(r => {
     const tr = tb.insertRow();
@@ -553,7 +578,7 @@ function renderGrid(data) {
 
 $('dl').onclick = () => {
   if (!rows.length) return;
-  const cols = Object.keys(rows[0]);
+  const cols = colsOf(rows[0]).map(c => c[0]);
   const esc = v => {
     let s = String(v ?? '');
     if (typeof v === 'string' && /^[=+\-@]/.test(s)) s = "'" + s;   // chống CSV injection (không đụng tới số âm)
@@ -617,7 +642,7 @@ const RULES = [
   'Dòng BOM ghi "thay thế" luôn được tính (thường là mã CK thay cho nguyên liệu cũ): trong BOM, vật tư nào nằm trong danh mục mã đặt hàng CK thì được giữ.',
   'Tên nhà hàng trên trang lấy theo database. File lịch đặt hàng dùng tên khác cho vài nhà hàng, nên khi tra lịch đổi về tên trong file lịch (KRU20-PXL2 là KRU10-PXL2, KRU15-VP6 là KRU13-VP6, KRU14-PVT là KRU12-PVT, KSY3-LTQ7 là KSY3-LOTTE; KSY3 chưa xác nhận).',
   'Kết quả là số đề xuất tham khảo, nhà hàng vẫn cần kiểm tra trước khi đặt. Hàng đang vận chuyển (CK đã xuất nhưng nhà hàng chưa nhập kho, làm tăng tồn) chưa có nguồn dữ liệu nên đang coi bằng 0; khi có nguồn sẽ cộng vào tồn dự kiến. Chưa xét: hệ số tăng trưởng, tồn an toàn, quy cách đóng gói, hàng Sốt taru taru, tuần 1 và tuần 3 của hàng CCDC.',
-  'Hai cột quy đổi để kiểm tra dữ liệu: "Quy đổi ra ĐVT Kg" lấy từ danh mục mã đặt hàng CK (1 ĐVT bằng bao nhiêu Kg) và "SL đề xuất đặt quy ra Kg" = SL đề xuất x hệ số đó. Chưa dùng hệ số này để tính, chỉ để đối chiếu.',
+  'Hai cột quy đổi để kiểm tra dữ liệu: "Quy đổi ra ĐVT Kg" lấy từ danh mục mã đặt hàng CK (1 ĐVT bằng bao nhiêu Kg) và "SL đề xuất đặt quy ra Kg" = SL đề xuất x hệ số đó. Các cột lưới được đánh số, cách tính ghi ngay dưới tên cột; mọi giá trị số đều làm tròn lên số nguyên (trừ hệ số quy đổi), và các cột cộng trừ (11, 12, 14) tính trên số đã làm tròn nên kiểm tra tay khớp từng cột.',
   'Bước 5 (Hàng đang vận chuyển) hiện màu đỏ khi thanh chạy tới vì chưa có dữ liệu. Bước 6 hiện màu vàng khi chưa tính được (API chưa cấu hình, brand chưa có BOM), màu đỏ khi lỗi.',
   'Download CSV tải đúng các dòng đang hiển thị trên lưới.',
   'Nút "Mã đặt hàng CK" mở bảng danh mục mã vật tư đặt từ CK (cài sẵn trong trang theo file Excel), có lọc theo nhóm hàng, phân tổ, brand và tìm theo mã hoặc tên.'
