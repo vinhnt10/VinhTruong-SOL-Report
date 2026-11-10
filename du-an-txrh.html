@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Dự án TXRH | Quản lý tiến độ</title>
+<style>
+  :root { --bg:#f7f8fa; --card:#fff; --line:#e3e6eb; --fg:#1b1f29; --muted:#6a7285; --accent:#2f5bea;
+          --red:#ef4444; --green:#16a34a; --blue:#2563eb; --bar:#f5b400; --we:#e5e7eb; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:system-ui,-apple-system,"Segoe UI",sans-serif; background:var(--bg); color:var(--fg); font-size:13px; }
+  main { padding:14px 16px 40px; }
+  h1 { font-size:18px; margin:0; }
+  .top { display:flex; flex-wrap:wrap; gap:10px 16px; align-items:center; margin-bottom:10px; }
+  .top .sp { flex:1; }
+  .sum { display:flex; align-items:center; gap:8px; font-size:12.5px; color:var(--muted); }
+  .sum .meter { width:160px; height:8px; background:#e5e7eb; border-radius:99px; overflow:hidden; }
+  .sum .meter i { display:block; height:100%; }
+  button.b { font:inherit; padding:6px 11px; border:1px solid var(--line); border-radius:8px; background:#fff; color:var(--fg); cursor:pointer; }
+  button.b:hover { border-color:var(--accent); color:var(--accent); }
+  .note { font-size:12px; color:var(--muted); margin:0 0 10px; line-height:1.5; }
+  .wrap { overflow:auto; max-height:78vh; background:var(--card); border:1px solid var(--line); border-radius:10px; }
+  table { border-collapse:separate; border-spacing:0; }
+  th, td { border-bottom:1px solid var(--line); border-right:1px solid #eef0f3; padding:3px 6px; vertical-align:middle; }
+  thead th { position:sticky; top:0; z-index:3; background:#f6b17a; color:#3b2412; font-weight:700; text-align:center; font-size:12.5px; }
+  thead tr:first-child th { height:24px; padding-top:0; padding-bottom:0; }
+  thead tr.r2 th { top:24px; padding:2px 0; }
+  th.day { min-width:22px; width:22px; font-weight:600; font-size:10.5px; background:#fde4cf; line-height:1.15; }
+  th.day.we { background:#d8dbe0; }
+  th.day.today { background:var(--accent); color:#fff; }
+  th.mon { background:#f6b17a; font-size:11px; }
+  td.c { text-align:center; }
+  td.g { background:#fff; text-align:center; }
+  td.gd { min-width:22px; width:22px; padding:0; border-right:1px solid #eef0f3; }
+  td.gd.we { background:var(--we); }
+  td.gd.bar { background:var(--bar); }
+  td.gd.today { box-shadow:inset 1px 0 0 var(--accent), inset -1px 0 0 var(--accent); }
+  input, textarea { font:inherit; font-size:12.5px; color:var(--fg); border:1px solid transparent; border-radius:5px; background:transparent; padding:3px 4px; width:100%; }
+  input:hover, textarea:hover { border-color:var(--line); background:#fff; }
+  input:focus, textarea:focus { outline:2px solid #c7d2fe; border-color:var(--accent); background:#fff; }
+  textarea { resize:none; overflow:hidden; line-height:1.35; display:block; }
+  textarea.hl { color:#c00000; font-weight:600; }
+  input[type=date] { width:112px; padding:3px 2px; font-size:12px; }
+  table.compact .xc { display:none; }
+  .ws { display:flex; flex-direction:column; gap:4px; align-items:stretch; }
+  .ws .add { font-size:11px; padding:2px 6px; color:var(--muted); }
+  .pct { display:flex; align-items:center; gap:6px; min-width:130px; }
+  .pct input[type=range] { padding:0; width:76px; cursor:pointer; border:0; background:none; }
+  .pct .v { min-width:46px; text-align:center; color:#fff; border-radius:99px; padding:1px 0; font-weight:700; font-size:12px; }
+  .del { border:0; background:none; color:#9aa1b0; cursor:pointer; font-size:15px; padding:0 4px; }
+  .del:hover { color:var(--red); }
+  .legend { display:flex; gap:14px; flex-wrap:wrap; font-size:12px; color:var(--muted); margin:0 0 10px; }
+  .legend i { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:5px; vertical-align:-1px; }
+  .warn { color:#b45309; }
+</style>
+</head>
+<body>
+<main>
+  <div class="top">
+    <h1 id="ttl">PLAN TRIỂN KHAI POS, F2 CHO TXRH LM81</h1>
+    <div class="sum"><span id="sumTxt"></span><span class="meter"><i id="sumBar"></i></span></div>
+    <span class="sp"></span>
+    <button class="b" id="cmp" title="Ẩn cột Owner, Support, Actual Finish để thấy biểu đồ ngày rõ hơn">Thu gọn cột</button>
+    <button class="b" id="addG">+ Thêm nhóm</button>
+    <button class="b" id="exp">Xuất JSON</button>
+    <button class="b" id="imp">Nhập JSON</button>
+    <button class="b" id="rst">Về dữ liệu mẫu</button>
+    <input type="file" id="file" accept="application/json,.json" hidden>
+  </div>
+  <p class="note">Sửa trực tiếp trên bảng. Đổi <b>Từ ngày / Đến ngày</b> thì các cột ngày bên phải tự co giãn theo (từ ngày nhỏ nhất đến ngày lớn nhất của cả kế hoạch). Kéo thanh <b>% Complete</b> từ 0 đến 100. Dữ liệu lưu trong trình duyệt này (chưa lưu lên server), dùng Xuất JSON để sao lưu hoặc chuyển máy.</p>
+  <div class="legend">
+    <span><i style="background:var(--red)"></i>Dưới 50%</span>
+    <span><i style="background:var(--green)"></i>Từ 50% đến dưới 100%</span>
+    <span><i style="background:var(--blue)"></i>100%</span>
+    <span><i style="background:var(--bar);border-radius:2px"></i>Thời gian kế hoạch</span>
+    <span><i style="background:var(--we);border-radius:2px"></i>Thứ 7, Chủ nhật</span>
+    <span class="warn" id="warn"></span>
+  </div>
+  <div class="wrap"><table id="t"></table></div>
+</main>
+
+<script src="depts.js"></script>
+<script src="auth.js"></script>
+<script>
+const KEY = 'sol_txrh_v1', MAXDAYS = 400;
+const DEFAULT = {
+  groups: [
+    { name: 'Dự án & Hợp đồng' }, { name: 'Hạ tầng & Công nghệ TT' }, { name: 'Dữ liệu danh mục (Master Data)' },
+    { name: 'Quản lý tồn kho & Hệ thống' }, { name: 'Tích hợp hệ thống' }, { name: 'Test và bàn giao' },
+    { name: 'Đào tạo kèm Quy trình vận hành chuẩn (SOP)' }, { name: 'Vận hành chính thức' }
+  ],
+  tasks: [
+    [0, 'Kick-off; thống nhất scope, mục tiêu và đầu mối', '2026-11-05', '2026-11-05', 'Vĩ', '', 100],
+    [0, 'Đề xuất chi phí đầu tư POS, F2', '2026-11-06', '2026-11-06', 'Vĩ', '', 100],
+    [0, 'Đàm phán và ký hợp đồng R-Keeper\nđảm bảo hoàn tất video bán hàng trước khi ký\nLưu ý có thêm máy đọc thẻ nhân viên', '2026-11-09', '2026-11-12', 'Vinh', 'Vĩ', 0],
+    [0, 'Đàm phán và ký hợp đồng F2', '2026-11-09', '2026-11-12', 'Vinh', 'Vĩ', 0],
+    [1, 'Thanh toán, giao nhận và lắp đặt thiết bị', '2026-11-11', '2026-11-13', 'Vinh', 'Nga', 0],
+    [1, 'Cài đặt hệ điều hành, POS software, user và phân quyền', '2026-11-13', '2026-11-13', 'Vinh', 'Dcorp, F2', 0],
+    [1, 'Chuẩn bị data test và Cài đặt Menu bán, NVL, BOM', '2026-11-09', '2026-11-13', 'Vinh', 'Nga, Ngọc, Trúc Quỳnh', 0],
+    [2, 'Chốt menu bán, nhóm món, modifier, size và giá bán\nChuẩn hóa tên món EN/VN, mã món và phân loại menu', '2026-11-09', '2026-11-12', 'Thạch', 'Nga', 0],
+    [2, 'Lập master NVL: mã, tên, nhóm hàng, NCC\nChuẩn hóa UOM, quy cách đóng gói và hệ số quy đổi', '2026-11-09', '2026-11-12', 'Thúy', 'Nga', 0],
+    [2, 'Lập master BTP/TP và mapping tên Anh - Việt', '2026-11-09', '2026-11-12', 'Thạch', 'Nga', 0],
+    [2, 'Lập danh sách PR, PO, danh mục kiểm kê', '2026-11-09', '2026-11-12', 'Thạch', 'Thúy', 0],
+    [2, 'Lập danh mục giá mua NCC?', '2026-11-09', '2026-11-12', 'Thúy', 'Nga', 0],
+    [2, 'Xây dựng bộ định mức BOM cho món bán và BTP (excel)', '2026-11-09', '2026-11-12', 'Thạch', 'Nga, Trúc Quỳnh', 0],
+    [3, 'Thiết lập và ban hành SOP-Quy trình PR, nhận hàng, xuất hàng, thuế, kiểm kê, xử lý chênh lệch tuần, giảm giá nhân viên, quy trình nội tiền, báo cáo ngày/tuần/tháng', '2026-11-09', '2026-11-18', 'Thạch', 'Vinh, Thúy, Nga', 0, 1],
+    [4, 'Chốt mapping R-Keeper → F2 (sales, item, qty, date)', '2026-11-11', '2026-11-30', 'Vinh', '', 0],
+    [4, 'Cấu hình API và kết nối môi trường test', '2026-11-11', '2026-11-30', 'Vinh', '', 0],
+    [5, 'Test phần mềm: báo cáo bán hàng, form mẫu, order, nhập - xuất- tồn kho, chênh lệch sổ sách vs thực tế…', '2026-11-16', '2026-11-20', 'Vinh', 'Nga, Thúy', 0],
+    [5, 'Bàn giao cho đào tạo, ops test tiếp', '2026-11-20', '2026-11-20', 'Vinh', '', 0],
+    [6, 'Đào tạo quản lý, thu ngân, phục vụ, bếp, kho, kế toán', '2026-11-16', '2026-12-05', 'Thạch', '', 0],
+    [6, 'Thực hành mô phỏng ca bán hàng và xử lý tình huống', '2026-11-16', '2026-12-05', 'Thạch', '', 0],
+    [7, 'KHAI TRƯƠNG – vận hành POS chính thức', '2026-12-15', '2026-12-15', 'All team', '', 0, 1]
+  ]
+};
+const mk = () => ({
+  title: 'PLAN TRIỂN KHAI POS, F2 CHO TXRH LM81',
+  groups: DEFAULT.groups.map(g => ({ name: g.name })),
+  tasks: DEFAULT.tasks.map(r => ({ gid: r[0], task: r[1], start: r[2], end: r[3], owner: r[4], support: r[5], pct: r[6], actual: '', hl: r[7] ? 1 : 0 }))
+});
+
+let S;
+function load() {
+  try { const j = JSON.parse(localStorage.getItem(KEY) || 'null'); if (j && Array.isArray(j.groups) && Array.isArray(j.tasks)) return j; } catch (e) {}
+  return mk();
+}
+let saveT = 0;
+function save() { clearTimeout(saveT); saveT = setTimeout(() => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} }, 250); }
+
+/* ---- ngày ---- */
+const pd = s => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s || ''); return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null; };
+const iso = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+const addD = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
+const WD = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
+
+/* ---- màu % ---- */
+const pctColor = p => p >= 100 ? 'var(--blue)' : p >= 50 ? 'var(--green)' : 'var(--red)';
+
+const el = (tag, props, ...kids) => {
+  const e = document.createElement(tag);
+  if (props) for (const k in props) { if (k === 'class') e.className = props[k]; else if (k === 'style') e.style.cssText = props[k]; else e[k] = props[k]; }
+  kids.forEach(k => e.append(k));
+  return e;
+};
+const fit = ta => { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; };
+
+function summary() {
+  const n = S.tasks.length;
+  const avg = n ? Math.round(S.tasks.reduce((a, t) => a + (+t.pct || 0), 0) / n) : 0;
+  const done = S.tasks.filter(t => +t.pct >= 100).length;
+  document.getElementById('sumTxt').textContent = `Tổng tiến độ ${avg}% · ${done}/${n} đầu việc hoàn tất`;
+  const b = document.getElementById('sumBar'); b.style.width = avg + '%'; b.style.background = pctColor(avg);
+}
+
+function render() {
+  const t = document.getElementById('t');
+  // Dải ngày: nhỏ nhất đến lớn nhất của các đầu việc hợp lệ
+  let lo = null, hi = null;
+  S.tasks.forEach(k => {
+    const a = pd(k.start), b = pd(k.end);
+    [a, b].forEach(d => { if (!d) return; if (!lo || d < lo) lo = d; if (!hi || d > hi) hi = d; });
+  });
+  const today = new Date(); const td = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  if (!lo) { lo = td; hi = addD(td, 14); }
+  let n = Math.round((hi - lo) / 864e5) + 1, capped = false;
+  if (n > MAXDAYS) { n = MAXDAYS; capped = true; }
+  document.getElementById('warn').textContent = capped ? `Dải ngày quá dài (> ${MAXDAYS} ngày), chỉ hiển thị ${MAXDAYS} ngày đầu. Kiểm tra lại ngày nhập.` : '';
+  const days = Array.from({ length: n }, (_, i) => addD(lo, i));
+
+  t.replaceChildren();
+  const head = t.createTHead();
+  const r1 = head.insertRow(), r2 = head.insertRow(); r2.className = 'r2';
+  [['ID', 34, 0], ['Workstream', 130, 0], ['Task / Deliverable', 340, 0], ['Planned Start', 118, 0], ['Planned Finish', 118, 0], ['Owner', 80, 1], ['Support', 110, 1], ['% Complete', 150, 0], ['Actual Finish', 118, 1], ['', 26, 0]].forEach(([h, w, x]) => {
+    const th = el('th', { rowSpan: 2, textContent: h, class: x ? 'xc' : '' }); th.style.minWidth = w + 'px'; r1.append(th);
+  });
+  // hàng tháng
+  let i = 0;
+  while (i < n) {
+    let j = i; while (j + 1 < n && days[j + 1].getMonth() === days[i].getMonth()) j++;
+    r1.append(el('th', { class: 'mon', colSpan: j - i + 1, textContent: `T${days[i].getMonth() + 1}/${days[i].getFullYear()}` }));
+    i = j + 1;
+  }
+  days.forEach(d => {
+    const cls = 'day' + ([0, 6].includes(d.getDay()) ? ' we' : '') + (d.getTime() === td.getTime() ? ' today' : '');
+    const th = el('th', { class: cls, title: iso(d) });
+    th.append(String(d.getDate()), document.createElement('br'), WD[d.getDay()]);
+    r2.append(th);
+  });
+
+  // thân bảng, các đầu việc xếp theo nhóm
+  const tb = t.createTBody();
+  S.groups.forEach((g, gi) => {
+    const idx = S.tasks.map((k, i2) => k.gid === gi ? i2 : -1).filter(x => x >= 0);
+    idx.forEach((ti, pos) => {
+      const k = S.tasks[ti], tr = tb.insertRow();
+      if (pos === 0) {
+        tr.append(el('td', { class: 'c', rowSpan: idx.length, textContent: String(gi + 1), style: 'font-weight:700' }));
+        const name = el('textarea', { value: g.name, rows: 1, title: 'Tên workstream', style: 'text-align:center;font-weight:600' });
+        name.oninput = () => { g.name = name.value; fit(name); save(); };
+        const add = el('button', { class: 'b add', textContent: '+ Task', title: 'Thêm đầu việc vào nhóm này' });
+        add.onclick = () => { S.tasks.splice(idx[idx.length - 1] + 1, 0, newTask(gi)); save(); render(); };
+        const w = el('td', { rowSpan: idx.length }, el('div', { class: 'ws' }, name, add));
+        tr.append(w);
+      }
+      const ta = el('textarea', { value: k.task, rows: 1, class: k.hl ? 'hl' : '' });
+      ta.oninput = () => { k.task = ta.value; fit(ta); save(); };
+      tr.append(el('td', null, ta));
+
+      const ds = el('input', { type: 'date', value: k.start || '' });
+      const de = el('input', { type: 'date', value: k.end || '' });
+      ds.onchange = () => { k.start = ds.value; if (k.start && k.end && k.end < k.start) k.end = k.start; save(); render(); };
+      de.onchange = () => { k.end = de.value; if (k.start && k.end && k.end < k.start) k.start = k.end; save(); render(); };
+      tr.append(el('td', null, ds), el('td', null, de));
+
+      const ow = el('input', { value: k.owner || '' }), su = el('input', { value: k.support || '' });
+      ow.oninput = () => { k.owner = ow.value; save(); }; su.oninput = () => { k.support = su.value; save(); };
+      tr.append(el('td', { class: 'xc' }, ow), el('td', { class: 'xc' }, su));
+
+      const rg = el('input', { type: 'range', min: 0, max: 100, step: 1, value: +k.pct || 0, title: 'Kéo từ 0 đến 100' });
+      const v = el('span', { class: 'v' });
+      const paint = () => { const p = +rg.value; v.textContent = p + '%'; v.style.background = pctColor(p); rg.style.accentColor = getComputedStyle(v).backgroundColor; };
+      paint();
+      rg.oninput = () => { k.pct = +rg.value; paint(); summary(); save(); };
+      tr.append(el('td', null, el('div', { class: 'pct' }, rg, v)));
+
+      const ac = el('input', { type: 'date', value: k.actual || '' });
+      ac.onchange = () => { k.actual = ac.value; save(); };
+      tr.append(el('td', { class: 'xc' }, ac));
+
+      const del = el('button', { class: 'del', textContent: '×', title: 'Xoá đầu việc này' });
+      del.onclick = () => {
+        if (!confirm('Xoá đầu việc này?')) return;
+        S.tasks.splice(ti, 1);
+        if (!S.tasks.some(x => x.gid === gi)) {                       // nhóm hết việc thì bỏ nhóm và đánh lại ID
+          S.groups.splice(gi, 1); S.tasks.forEach(x => { if (x.gid > gi) x.gid--; });
+        }
+        save(); render();
+      };
+      tr.append(el('td', { class: 'c' }, del));
+
+      // các cột ngày
+      const a = pd(k.start), b = pd(k.end);
+      days.forEach(d => {
+        const on = a && b && d >= a && d <= b;
+        tr.append(el('td', { class: 'gd' + (on ? ' bar' : ([0, 6].includes(d.getDay()) ? ' we' : '')) + (d.getTime() === td.getTime() ? ' today' : '') }));
+      });
+    });
+  });
+  t.querySelectorAll('textarea').forEach(fit);
+  summary();
+}
+const newTask = gid => ({ gid, task: 'Đầu việc mới', start: iso(new Date()), end: iso(new Date()), owner: '', support: '', pct: 0, actual: '', hl: 0 });
+
+document.getElementById('cmp').onclick = e => { const c = document.getElementById('t').classList.toggle('compact'); e.target.textContent = c ? 'Hiện đủ cột' : 'Thu gọn cột'; };
+document.getElementById('addG').onclick = () => { S.groups.push({ name: 'Workstream mới' }); S.tasks.push(newTask(S.groups.length - 1)); save(); render(); };
+document.getElementById('rst').onclick = () => { if (confirm('Đưa về dữ liệu mẫu ban đầu? Mọi chỉnh sửa hiện tại sẽ mất.')) { S = mk(); save(); render(); SOLAuth.log('Dự án TXRH', 'Về dữ liệu mẫu'); } };
+document.getElementById('exp').onclick = () => {
+  const blob = new Blob([JSON.stringify(S, null, 2)], { type: 'application/json' });
+  const a = el('a', { href: URL.createObjectURL(blob), download: 'du-an-txrh-' + iso(new Date()) + '.json' });
+  document.body.append(a); a.click(); a.remove(); URL.revokeObjectURL(a.href);
+  SOLAuth.log('Download', 'Dự án TXRH (JSON)');
+};
+document.getElementById('imp').onclick = () => document.getElementById('file').click();
+document.getElementById('file').onchange = e => {
+  const f = e.target.files[0]; if (!f) return;
+  const r = new FileReader();
+  r.onload = () => {
+    try {
+      const j = JSON.parse(r.result);
+      if (!Array.isArray(j.groups) || !Array.isArray(j.tasks)) throw 0;
+      S = { title: j.title || '', groups: j.groups.map(g => ({ name: String(g.name || '') })),
+            tasks: j.tasks.map(k => ({ gid: Math.min(Math.max(0, +k.gid || 0), j.groups.length - 1), task: String(k.task || ''), start: pd(k.start) ? k.start : '', end: pd(k.end) ? k.end : '',
+              owner: String(k.owner || ''), support: String(k.support || ''), pct: Math.min(100, Math.max(0, +k.pct || 0)), actual: pd(k.actual) ? k.actual : '', hl: k.hl ? 1 : 0 })) };
+      save(); render(); SOLAuth.log('Dự án TXRH', 'Nhập JSON');
+    } catch (err) { alert('File JSON không đúng định dạng.'); }
+  };
+  r.readAsText(f); e.target.value = '';
+};
+
+if (SOLAuth.guard('vinh-truong')) {
+  S = load();
+  if (S.title) document.getElementById('ttl').textContent = S.title;
+  render();
+  if (window.top === window) SOLAuth.log('Mở trang', 'Vinh Trương / Dự án TXRH');
+}
+</script>
+</body>
+</html>
